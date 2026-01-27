@@ -35,4 +35,4 @@ python simulate.py
 
 ## ToDos
 
-[ ] Create a frontend design 
+- [ ] Create a frontend design 
