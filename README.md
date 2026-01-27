@@ -32,3 +32,7 @@ SELECT * FROM device_telemetry;
 ```bash
 python simulate.py
 ```
+
+## ToDos
+
+[ ] Create a frontend design 
