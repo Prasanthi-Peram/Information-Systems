@@ -1,3 +1,6 @@
 fastapi
 uvicorn[standard]
+python-socketio[asyncio_client]
+python-socketio
+python-engineio
 psycopg[binary,pool]
