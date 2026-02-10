@@ -1,24 +1,27 @@
 import os
 import psycopg
+import pandas as pd
 from contextlib import contextmanager
 
+# Enable database only if connection details are provided
+DB_ENABLED = bool(os.getenv("DB_HOST") and os.getenv("DB_USER"))
 
+# =============================
+# CONNECTION
+# =============================
 def get_db_connection():
-    """Get a database connection using environment variables"""
     return psycopg.connect(
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", ""),
-        dbname=os.getenv("DB_NAME", "postgres")
+        dbname=os.getenv("DB_NAME", "postgres"),
     )
-
 
 @contextmanager
 def get_db_cursor():
-    """Context manager for database cursor"""
     conn = get_db_connection()
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
         yield cur
         conn.commit()
     except Exception:
@@ -28,35 +31,64 @@ def get_db_cursor():
         cur.close()
         conn.close()
 
+# =============================
+# TELEMETRY
+# =============================
 def insert_device_telemetry(data: dict):
+    if not DB_ENABLED:
+        return
+
     with get_db_cursor() as cur:
         cur.execute(
             """
             INSERT INTO device_telemetry (
-                time_stamp,
-                device_id,
-                current,
-                voltage,
-                power_factor,
-                real_power,
-                room_temp,
-                external_temp,
-                humidity,
-                unit_consumption
+                time_stamp, device_id,
+                current, voltage, power_factor, real_power,
+                room_temp, external_temp, humidity, unit_consumption
             ) VALUES (
-                %(time_stamp)s,
-                %(device_id)s,
-                %(current)s,
-                %(voltage)s,
-                %(power_factor)s,
-                %(real_power)s,
-                %(room_temp)s,
-                %(external_temp)s,
-                %(humidity)s,
-                %(unit_consumption)s
+                %(time_stamp)s, %(device_id)s,
+                %(current)s, %(voltage)s, %(power_factor)s, %(real_power)s,
+                %(room_temp)s, %(external_temp)s, %(humidity)s, %(unit_consumption)s
             )
             """,
             data,
         )
 
+# =============================
+# SERVICE DATES
+# =============================
+def fetch_service_dates():
+    if not DB_ENABLED:
+        return pd.DataFrame(columns=[
+            "device_id", "last_service_date", "next_service_date"
+        ])
 
+    try:
+        with get_db_connection() as conn:
+            return pd.read_sql("SELECT * FROM ac_service", conn)
+    except Exception as e:
+        print(f"⚠️  DB Error fetching service dates: {e}")
+        return pd.DataFrame(columns=[
+            "device_id", "last_service_date", "next_service_date"
+        ])
+
+# =============================
+# ML FEEDBACK
+# =============================
+def save_ml_feedback(device_id, time_stamp, feedback):
+    if not DB_ENABLED:
+        print(f"📝 Feedback: {device_id} | {time_stamp} | {feedback}")
+        return
+
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ml_feedback (device_id, time_stamp, feedback)
+                VALUES (%s, %s, %s)
+                """,
+                (device_id, time_stamp, feedback),
+            )
+        print(f"✅ Feedback saved: {device_id} - {feedback}")
+    except Exception as e:
+        print(f"❌ Error saving feedback: {e}")

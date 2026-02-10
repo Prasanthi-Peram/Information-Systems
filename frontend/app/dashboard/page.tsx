@@ -1,169 +1,199 @@
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { SunSnow, Zap, Briefcase, ArrowUpRight, TrendingDown, TrendingUp, AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { HealthChart } from '@/components/ui/health-chart'
-import { ChartAreaInteractive } from '@/components/ui/parameters'
-import TableSelectableRowDemo from '@/components/ui/maitenance-info'
+'use client'
 
-const cards = [
-  {
-    icon: SunSnow,
-    iconColor: 'text-green-600',
-    title: 'Active ACs',
-    badge: {
-      color: 'bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400',
-      icon: TrendingUp,
-      iconColor: 'text-green-500',
-      text: '+12.8%',
-    },
-    value: 17,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: Zap,
-    iconColor: 'text-blue-600',
-    title: 'Power Consumption',
-    badge: {
-      color: 'bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400',
-      icon: TrendingUp,
-      iconColor: 'text-blue-500',
-      text: '+3.7%',
-    },
-    value: 3421,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: ArrowUpRight,
-    iconColor: 'text-pink-600',
-    title: 'Avg. Performance',
-    badge: {
-      color: 'bg-pink-100 text-pink-600 dark:bg-pink-950 dark:text-pink-400',
-      icon: TrendingDown,
-      iconColor: 'text-pink-500',
-      text: '-2.1%',
-    },
-    value: 89,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: Briefcase,
-    iconColor: 'text-purple-600',
-    title: 'Scheduled Maintenance',
-    badge: {
-      color: 'bg-purple-100 text-purple-600 dark:bg-purple-950 dark:text-purple-400',
-      icon: TrendingUp,
-      iconColor: 'text-purple-500',
-      text: '+8.2%',
-    },
-    value: 124567,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: AlertCircle,
-    iconColor: 'text-orange-600',
-    title: 'Alerts',
-    badge: {
-      color: 'bg-orange-100 text-orange-600 dark:bg-orange-950 dark:text-orange-400',
-      icon: TrendingUp,
-      iconColor: 'text-orange-500',
-      text: '+5.3%',
-    },
-    value: 12,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-]
+import { useState, useCallback, useMemo } from 'react'
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card'
+import {
+  SunSnow,
+  Zap,
+  Briefcase,
+  ArrowUpRight,
+  AlertCircle,
+} from 'lucide-react'
+
+import { ChartAreaInteractive } from '@/components/ui/parameters'
+import { HealthChart } from '@/components/ui/health-chart'
+import MaintenanceTable from '@/components/ui/maitenance-info'
+import AlertsPanel from '@/components/ui/alerts-panel'
+import { useWebSocket } from '@/hooks/useWebSocket'
+
+/* ===============================
+   TYPES
+================================ */
+export type ACData = {
+  Device_ID: string
+  Time_Stamp: string
+  voltage: number
+  Current: number
+  Real_Power_calc: number
+  pred_perf: number
+  Health_Score: number
+  pred_condition: string
+  Maintenance_Advice: string
+  critical_alert: number
+
+  // OPTIONAL (future-safe)
+  last_service_date?: string
+  next_service_date?: string
+}
+
+type HistoryPoint = {
+  time: string
+  voltage: number
+  current: number
+  power: number
+  health: number
+}
 
 export default function DashboardPage() {
+  const [latestByAC, setLatestByAC] = useState<Record<string, ACData>>({})
+  const [history, setHistory] = useState<HistoryPoint[]>([])
+  const [wsConnected, setWsConnected] = useState(false)
+
+  /* -------------------------------
+     WEBSOCKET HANDLER
+  -------------------------------- */
+  const onWSMessage = useCallback((payload: any[] | any) => {
+    console.log('📩 WS payload:', payload)
+
+    const rows = Array.isArray(payload) ? payload : [payload]
+    if (!rows.length) return
+
+    setLatestByAC((prev) => {
+      const next = { ...prev }
+      rows.forEach((r) => {
+        if (!r?.Device_ID) return
+        next[r.Device_ID] = r
+      })
+      return next
+    })
+
+    setHistory((prev) => [
+      ...prev.slice(-120),
+      ...rows.map((r) => ({
+        time: r.Time_Stamp ?? '',
+        voltage: r.voltage ?? 0,
+        current: r.Current ?? 0,
+        power: r.Real_Power_calc ?? 0,
+        health: r.Health_Score ?? 0,
+      })),
+    ])
+
+    setWsConnected(true)
+  }, [])
+
+  useWebSocket('/ws/ml', onWSMessage)
+
+  /* -------------------------------
+     DERIVED DATA
+  -------------------------------- */
+  const acList = useMemo(() => Object.values(latestByAC), [latestByAC])
+  const liveCount = acList.length
+
+  /* -------------------------------
+     UI STATES
+  -------------------------------- */
+  if (!wsConnected) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        🔌 Connecting to ML WebSocket…
+      </div>
+    )
+  }
+
+  if (liveCount === 0) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        ⏳ Waiting for ML data…
+      </div>
+    )
+  }
+
+  /* -------------------------------
+     KPI CALCULATIONS
+  -------------------------------- */
+  const totalPower = acList.reduce(
+    (s, r) => s + (r.Real_Power_calc ?? 0),
+    0
+  )
+
+  const avgPerf =
+    acList.reduce((s, r) => s + (r.pred_perf ?? 0), 0) / liveCount
+
+  const avgHealth =
+    acList.reduce((s, r) => s + (r.Health_Score ?? 0), 0) / liveCount
+
+  const totalAlerts = acList.filter((r) => r.critical_alert === 1).length
+
+  const cards = [
+    { icon: SunSnow, title: 'Active ACs', value: liveCount },
+    { icon: Zap, title: 'Power Consumption (W)', value: Math.round(totalPower) },
+    { icon: ArrowUpRight, title: 'Avg Performance', value: avgPerf.toFixed(1) },
+    { icon: Briefcase, title: 'Avg Health', value: avgHealth.toFixed(0) },
+    { icon: AlertCircle, title: 'Alerts', value: totalAlerts },
+  ]
+
+  /* ===============================
+     RENDER
+  ================================ */
   return (
-    <div className="p-4 lg:p-6">
-      <div className="@container grow w-full space-y-6">
-        <div className="grid grid-cols-1 @3xl:grid-cols-5 gap-4">
-          {cards.map((card, i) => (
+    <div className="p-6 space-y-6">
+
+      <Badge className="bg-green-100 text-green-700">
+        ● LIVE · ML updates every 3 seconds
+      </Badge>
+
+      {/* KPI CARDS */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {cards.map((c, i) => {
+          const Icon = c.icon
+          return (
             <Card key={i}>
-              <CardContent className="flex flex-col h-full p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <card.icon className={cn('size-5', card.iconColor)} />
-                  <Badge className={cn('px-2 py-0.5 rounded-full flex items-center gap-1 text-xs', card.badge.color)}>
-                    <card.badge.icon className={`w-3 h-3 ${card.badge.iconColor}`} />
-                    {card.badge.text}
-                  </Badge>
-                </div>
-                <div className="flex-1 flex flex-col justify-between grow">
-                  <div>
-                    <div className="text-sm font-medium text-muted-foreground mb-1">{card.title}</div>
-                    <div className="text-2xl font-bold text-foreground">{card.value.toLocaleString()}</div>
-                  </div>
-                </div>
+              <CardContent className="p-4">
+                <Icon className="size-5 text-blue-600 mb-2" />
+                <div className="text-sm text-muted-foreground">{c.title}</div>
+                <div className="text-2xl font-bold">{c.value}</div>
               </CardContent>
             </Card>
-          ))}
+          )
+        })}
+      </div>
+
+      {/* CHARTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3">
+          <ChartAreaInteractive data={history} />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <div className="lg:col-span-3">
-            <ChartAreaInteractive />
-          </div>
-          <div className="lg:col-span-1">
-            <HealthChart />
-          </div>
+        <div className="lg:col-span-1">
+          <HealthChart data={history} />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">
-            <Card className="h-full flex flex-col">
-              <CardHeader>
-                <CardTitle>Maintenance Information</CardTitle>
-                <CardDescription>AC system maintenance records and status</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-auto min-h-[20rem] max-h-[30rem] lg:min-h-[25rem] lg:max-h-[35rem]">
-                <TableSelectableRowDemo />
-              </CardContent>
-            </Card>
-          </div>
-          <div className="lg:col-span-2">
-            <Card className="h-full flex flex-col">
-              <CardHeader>
-                <CardTitle>Alerts</CardTitle>
-                <CardDescription>System alerts and notifications</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 min-h-[20rem] lg:min-h-[25rem]">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
-                    <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-orange-900 dark:text-orange-100">High Temperature Alert</p>
-                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">AC Unit #5 temperature exceeded threshold</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-                    <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Maintenance Due</p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">AC Unit #12 scheduled maintenance in 3 days</p>
-                      <p className="text-xs text-muted-foreground mt-1">5 hours ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
-                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-red-900 dark:text-red-100">Power Consumption Spike</p>
-                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">Unusual power consumption detected in AC Unit #8</p>
-                      <p className="text-xs text-muted-foreground mt-1">1 day ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">Filter Replacement</p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">AC Unit #3 filter needs replacement</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 days ago</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+      </div>
+
+      {/* MAINTENANCE + ALERTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+
+        <div className="lg:col-span-3 overflow-hidden">
+          <Card>
+            <CardHeader>
+              <CardTitle>Maintenance Information</CardTitle>
+              <CardDescription>Live ML diagnostics</CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <MaintenanceTable data={acList} />
+            </CardContent>
+          </Card>
         </div>
+
+        <div className="lg:col-span-1">
+          <AlertsPanel data={acList} />
+        </div>
+
       </div>
     </div>
   )
