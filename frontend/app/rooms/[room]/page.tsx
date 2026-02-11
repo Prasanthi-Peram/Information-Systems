@@ -1,8 +1,10 @@
 "use client"
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/Button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { 
   Thermometer, 
@@ -11,7 +13,9 @@ import {
   Clock,
   Zap,
   Power,
-  Activity
+  Activity,
+  ArrowLeft,
+  Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { use } from 'react'
@@ -23,12 +27,19 @@ interface RoomPageProps {
 }
 
 export default function RoomPage({ params }: RoomPageProps) {
+  const router = useRouter()
   // Extract room name from params
   const { room } = use(params)
   const roomName = room 
     ? decodeURIComponent(room).replace(/-/g, ' ').toUpperCase()
     : 'Room'
-  
+
+  const handleAddDevice = () => {
+    // Placeholder for add device functionality
+    alert('Add Device functionality coming soon!')
+  }
+
+
   // Tab counts - these would come from your data source
   const tabCounts = {
     all: 6,
@@ -43,48 +54,24 @@ export default function RoomPage({ params }: RoomPageProps) {
       icon: Thermometer,
       iconColor: 'text-red-600',
       title: 'Room Temperature',
-      badge: {
-        color: 'bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400',
-        icon: TrendingUp,
-        iconColor: 'text-green-500',
-        text: '+2.1%',
-      },
       value: 24,
     },
     {
       icon: Droplets,
       iconColor: 'text-blue-600',
       title: 'Humidity',
-      badge: {
-        color: 'bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400',
-        icon: TrendingUp,
-        iconColor: 'text-blue-500',
-        text: '+1.5%',
-      },
       value: 55,
     },
     {
       icon: TrendingUp,
       iconColor: 'text-pink-600',
       title: 'Average Performance',
-      badge: {
-        color: 'bg-pink-100 text-pink-600 dark:bg-pink-950 dark:text-pink-400',
-        icon: TrendingUp,
-        iconColor: 'text-pink-500',
-        text: '+3.2%',
-      },
       value: 92,
     },
     {
       icon: Clock,
       iconColor: 'text-purple-600',
       title: 'Uptime',
-      badge: {
-        color: 'bg-purple-100 text-purple-600 dark:bg-purple-950 dark:text-purple-400',
-        icon: TrendingUp,
-        iconColor: 'text-purple-500',
-        text: '+0.5%',
-      },
       value: 99.8,
     },
   ]
@@ -97,6 +84,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Conference Room A',
       status: 'ON',
       temperature: 22.5,
+      humidity: 48,
       current: 8.5,
       voltage: 230,
       hoursToday: 6.5,
@@ -110,6 +98,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Office Floor 1',
       status: 'ON',
       temperature: 23,
+      humidity: 52,
       current: 9.2,
       voltage: 228,
       hoursToday: 7.2,
@@ -123,6 +112,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Server Room',
       status: 'ON',
       temperature: 18.5,
+      humidity: 45,
       current: 10.1,
       voltage: 231,
       hoursToday: 24,
@@ -136,6 +126,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Lobby',
       status: 'ON',
       temperature: 24,
+      humidity: 55,
       current: 7.8,
       voltage: 229,
       hoursToday: 5.5,
@@ -149,6 +140,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Cafeteria',
       status: 'OFF',
       temperature: 25,
+      humidity: 58,
       current: 0,
       voltage: 0,
       hoursToday: 0,
@@ -162,6 +154,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       location: 'Storage Room',
       status: 'MAINTENANCE',
       temperature: 20,
+      humidity: 50,
       current: 0,
       voltage: 0,
       hoursToday: 0,
@@ -178,7 +171,27 @@ export default function RoomPage({ params }: RoomPageProps) {
   return (
     <div className="@container grow w-full space-y-6">
         <div className="mb-4">
-          <h1 className="text-3xl font-bold mb-2">{roomName}</h1>
+          <div className="flex items-start justify-between mb-2">
+            <h1 className="text-3xl font-bold">{roomName}</h1>
+            <div className="flex flex-col gap-2">
+              <Link href="/rooms">
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              </Link>
+              <Button
+                onClick={handleAddDevice}
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Device
+              </Button>
+            </div>
+          </div>
           <p className="text-muted-foreground">Real-time monitoring and control</p>
         </div>
         
@@ -189,10 +202,6 @@ export default function RoomPage({ params }: RoomPageProps) {
               <CardContent className="flex flex-col h-full p-4">
                 <div className="flex items-center justify-between mb-4">
                   <card.icon className={cn('size-5', card.iconColor)} />
-                  <Badge className={cn('px-2 py-0.5 rounded-full flex items-center gap-1 text-xs', card.badge.color)}>
-                    <card.badge.icon className={`w-3 h-3 ${card.badge.iconColor}`} />
-                    {card.badge.text}
-                  </Badge>
                 </div>
                 <div className="flex-1 flex flex-col justify-between grow">
                   <div>
@@ -274,14 +283,21 @@ export default function RoomPage({ params }: RoomPageProps) {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Droplets className="h-5 w-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">Humidity</p>
+                            <p className="text-base font-semibold">{unit.humidity}%</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
                           <Activity className="h-5 w-5 text-purple-600" />
                           <div>
                             <p className="text-sm text-muted-foreground">Current</p>
                             <p className="text-base font-semibold">{unit.current}A</p>
                           </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <Zap className="h-5 w-5 text-yellow-600" />
                           <div>
@@ -289,13 +305,14 @@ export default function RoomPage({ params }: RoomPageProps) {
                             <p className="text-base font-semibold">{unit.voltage}V</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Power className="h-5 w-5 text-green-600" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">Hours Today</p>
-                            <p className="text-base font-semibold">{unit.hoursToday}h</p>
-                          </div>
-                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mb-3">
+                      <Power className="h-5 w-5 text-green-600" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Hours Today</p>
+                        <p className="text-base font-semibold">{unit.hoursToday}h</p>
                       </div>
                     </div>
                     

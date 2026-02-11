@@ -2,8 +2,9 @@
 
 import Image from "next/image"
 import { useActionState } from 'react'
-import { useRouter } from 'next/navigation'
-import Button from '@/components/ui/Button'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import {
   Form,
   FormGroup,
@@ -14,6 +15,7 @@ import {
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { signUp, ActionResponse } from '@/app/actions/auth'
+import { ArrowLeft } from 'lucide-react'
 
 const initialState: ActionResponse = {
   success: false,
@@ -24,6 +26,17 @@ const initialState: ActionResponse = {
 
 export default function SignUpPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const roleParam = searchParams.get('role') as 'administrator' | 'technician' | null
+  const [role, setRole] = useState<'administrator' | 'technician' | null>(roleParam)
+
+  useEffect(() => {
+    if (!roleParam || !['administrator', 'technician'].includes(roleParam)) {
+      router.push('/select-role')
+    } else {
+      setRole(roleParam)
+    }
+  }, [roleParam, router])
 
   // Use useActionState hook for the form submission action
   const [state, formAction, isPending] = useActionState<
@@ -49,9 +62,25 @@ export default function SignUpPage() {
     }
   }, initialState)
 
+  if (!role) {
+    return null // Will redirect to select-role
+  }
+
+  const isAdministrator = role === 'administrator'
+
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50 dark:bg-[#121212] bg-[url(/bg3.jpeg)]  bg-cover bg-center">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/select-role')}
+            className="font-mono text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+        </div>
         <div className="flex justify-center">
           <Image
             src="/header1.png"
@@ -63,107 +92,127 @@ export default function SignUpPage() {
           />
         </div>
         <h2 className="mt-2 font-mono text-center text-xl font-medium text-gray-700 dark:text-white">
-          Sign up to your account
+          Sign up as {role.charAt(0).toUpperCase() + role.slice(1)}
         </h2>
-
-
-    
       </div>
 
-      
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-      <Form action={formAction} className="space-y-6">
-      {state?.message && !state.success && (
-        <FormError>{state.message}</FormError>
-      )}
-
-      <FormGroup>
-        <FormLabel className="font-mono"htmlFor="email">Email</FormLabel>
-        <FormInput
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          disabled={isPending}
-          aria-describedby="email-error"
-          className={["font-mono",state?.errors?.email ? 'border-red-500' : ''].join(" ")}
-        />
-        {state?.errors?.email && (
-          <p id="email-error" className="text-sm text-red-500">
-            {state.errors.email[0]}
-          </p>
-        )}
-      </FormGroup>
-
-    <FormGroup>
-    <FormLabel className="font-mono" htmlFor="username">Username</FormLabel>
-    <FormInput
-      id="username"
-      name="username"
-      type="text"
-      required
-      disabled={isPending}
-      aria-describedby="username-error"
-      className={["font-mono",state?.errors?.username ? 'border-red-500' : ''].join(" ")}
-    />
-    {state?.errors?.username && (
-      <p id="username-error" className="text-sm text-red-500">
-        {state.errors.username[0]}
-      </p>
-    )}
-  </FormGroup>
-
-      <FormGroup>
-        <FormLabel className="font-mono" htmlFor="password">Password</FormLabel>
-        <FormInput
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          disabled={isPending}
-          aria-describedby="password-error"
-          className={state?.errors?.password ? 'border-red-500' : ''}
-        />
-        {state?.errors?.password && (
-          <p id="password-error" className="text-sm text-red-500">
-            {state.errors.password[0]}
-          </p>
-        )}
-      </FormGroup>
-
-      <FormGroup>
-        <FormLabel className="font-mono" htmlFor="confirmPassword">Confirm Password</FormLabel>
-        <FormInput
-          id="confirmPassword"
-          name="confirmPassword"
-          type="password"
-          autoComplete="new-password"
-          required
-          disabled={isPending}
-          aria-describedby="confirmPassword-error"
-          className={state?.errors?.confirmPassword ? 'border-red-500' : ''}
-        />
-        {state?.errors?.confirmPassword && (
-          <p id="confirmPassword-error" className="text-sm text-red-500">
-            {state.errors.confirmPassword[0]}
-          </p>
-        )}
-      </FormGroup>
-
-      <div>
-        <Button type="submit" className="w-full font-mono bg-blue-900 hover:bg-blue-800 active:bg-blue-950 text-white" isLoading={isPending}>
-          Sign up
-        </Button>
-      </div>
-    </Form>
         <div className="bg-white dark:bg-[#1A1A1A] py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-100 dark:border-dark-border-subtle">
+          <Form action={formAction} className="space-y-6">
+            {state?.message && !state.success && (
+              <FormError>{state.message}</FormError>
+            )}
+
+            <input type="hidden" name="role" value={role} />
+
+            {isAdministrator && (
+              <FormGroup>
+                <FormLabel className="font-mono" htmlFor="campusId">Campus ID</FormLabel>
+                <FormInput
+                  id="campusId"
+                  name="campusId"
+                  type="text"
+                  required
+                  disabled={isPending}
+                  aria-describedby="campusId-error"
+                  className={state?.errors?.campusId ? 'border-red-500' : ''}
+                  placeholder="Enter your campus ID"
+                />
+                {state?.errors?.campusId && (
+                  <p id="campusId-error" className="text-sm text-red-500">
+                    {state.errors.campusId[0]}
+                  </p>
+                )}
+              </FormGroup>
+            )}
+
+            <FormGroup>
+              <FormLabel className="font-mono" htmlFor="email">Email</FormLabel>
+              <FormInput
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                disabled={isPending}
+                aria-describedby="email-error"
+                className={["font-mono",state?.errors?.email ? 'border-red-500' : ''].join(" ")}
+              />
+              {state?.errors?.email && (
+                <p id="email-error" className="text-sm text-red-500">
+                  {state.errors.email[0]}
+                </p>
+              )}
+            </FormGroup>
+
+            <FormGroup>
+              <FormLabel className="font-mono" htmlFor="username">Username</FormLabel>
+              <FormInput
+                id="username"
+                name="username"
+                type="text"
+                required
+                disabled={isPending}
+                aria-describedby="username-error"
+                className={["font-mono",state?.errors?.username ? 'border-red-500' : ''].join(" ")}
+              />
+              {state?.errors?.username && (
+                <p id="username-error" className="text-sm text-red-500">
+                  {state.errors.username[0]}
+                </p>
+              )}
+            </FormGroup>
+
+            <FormGroup>
+              <FormLabel className="font-mono" htmlFor="password">Password</FormLabel>
+              <FormInput
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                disabled={isPending}
+                aria-describedby="password-error"
+                className={state?.errors?.password ? 'border-red-500' : ''}
+              />
+              {state?.errors?.password && (
+                <p id="password-error" className="text-sm text-red-500">
+                  {state.errors.password[0]}
+                </p>
+              )}
+            </FormGroup>
+
+            <FormGroup>
+              <FormLabel className="font-mono" htmlFor="confirmPassword">Confirm Password</FormLabel>
+              <FormInput
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                disabled={isPending}
+                aria-describedby="confirmPassword-error"
+                className={state?.errors?.confirmPassword ? 'border-red-500' : ''}
+              />
+              {state?.errors?.confirmPassword && (
+                <p id="confirmPassword-error" className="text-sm text-red-500">
+                  {state.errors.confirmPassword[0]}
+                </p>
+              )}
+            </FormGroup>
+
+            <div>
+              <Button type="submit" className="w-full font-mono bg-blue-900 hover:bg-blue-800 active:bg-blue-950 text-white" isLoading={isPending}>
+                Sign up
+              </Button>
+            </div>
+          </Form>
+          
           <div className="mt-6 text-center">
             <p className="font-mono text-sm text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
               <Link
-                href="/signin"
+                href={`/signin?role=${role}`}
                 className="font-medium font-mono text-blue-700 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 Sign in

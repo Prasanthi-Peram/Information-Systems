@@ -43,10 +43,12 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  isLoading = false,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    isLoading?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
 
@@ -55,10 +57,22 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      disabled={isLoading || props.disabled}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {isLoading ? (
+        <div className="flex items-center gap-2">
+          <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+          {props.children}
+        </div>
+      ) : (
+        props.children
+      )}
+    </Comp>
   )
 }
 
 export { Button, buttonVariants }
+
+export default Button

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -9,12 +10,15 @@ import {
   Power,
   Activity,
   ArrowLeft,
-  Clock
+  Clock,
+  TrendingUp,
+  Settings,
+  Download
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { use } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/Button'
 import { ChartAreaInteractive } from '@/components/ui/parameters'
 
 interface DevicePageProps {
@@ -26,6 +30,8 @@ interface DevicePageProps {
 
 export default function DevicePage({ params }: DevicePageProps) {
   const { room, deviceID } = use(params)
+  const [timeRange, setTimeRange] = useState('24h')
+  
   const roomName = room 
     ? decodeURIComponent(room).replace(/-/g, ' ').toUpperCase()
     : 'Room'
@@ -50,7 +56,80 @@ export default function DevicePage({ params }: DevicePageProps) {
     conditionColor,
     humidity: 55,
     powerConsumption: 2.4,
+    lastService: '15 days ago',
+    nextServiceDue: '75 days',
+    warrantyStatus: 'Active',
   }
+
+  // Generate mock temperature and humidity data for different time ranges
+  const generateChartData = (range: string) => {
+    const dataPoints = range === '24h' ? 24 : range === '7d' ? 7 : range === '30d' ? 30 : 12
+    const labels = range === '24h' 
+      ? Array.from({length: dataPoints}, (_, i) => `${i}:00`)
+      : range === '7d'
+      ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      : range === '30d'
+      ? Array.from({length: dataPoints}, (_, i) => `Day ${i + 1}`)
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    return {
+      labels,
+      temperature: Array.from({length: dataPoints}, () => 20 + Math.random() * 8),
+      humidity: Array.from({length: dataPoints}, () => 40 + Math.random() * 20)
+    }
+  }
+
+  const [chartData, setChartData] = useState(generateChartData(timeRange))
+
+  const handleTimeRangeChange = (range: string) => {
+    setTimeRange(range)
+    setChartData(generateChartData(range))
+  }
+
+  const handleExportReport = () => {
+    const reportData = {
+      deviceInfo: {
+        deviceId: deviceData.deviceId,
+        location: deviceData.location,
+        generatedAt: new Date().toISOString(),
+      },
+      deviceStatus: {
+        status: deviceData.status,
+        performance: `${deviceData.performance}%`,
+        condition: deviceData.condition,
+        runtimeToday: `${deviceData.hoursToday} hours`,
+        totalHours: `${deviceData.totalHoursOperated}h`,
+        temperature: `${deviceData.temperature}°C`,
+        humidity: `${deviceData.humidity}%`,
+        current: `${deviceData.current}A`,
+        voltage: `${deviceData.voltage}V`,
+        powerConsumption: `${deviceData.powerConsumption} kW`,
+      },
+      maintenanceInfo: {
+        lastService: deviceData.lastService,
+        nextServiceDue: deviceData.nextServiceDue,
+        warrantyStatus: deviceData.warrantyStatus,
+      },
+    }
+
+    const jsonString = JSON.stringify(reportData, null, 2)
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${deviceData.deviceId}_report_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const timeRanges = [
+    { value: '24h', label: '24 Hours' },
+    { value: '7d', label: '7 Days' },
+    { value: '30d', label: '30 Days' },
+    { value: '1y', label: '1 Year' }
+  ]
 
   const metrics = [
     {
@@ -97,20 +176,36 @@ export default function DevicePage({ params }: DevicePageProps) {
     },
   ]
 
+
+
   return (
     <div className="@container grow w-full space-y-6">
       <div className="mb-4">
-        <Link href={`/rooms/${room}`}>
-          <Button variant="ghost" size="sm" className="mb-2">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to {roomName}
-          </Button>
-        </Link>
-        <h1 className="text-3xl font-bold mb-2">{deviceIdDisplay}</h1>
-        <p className="text-muted-foreground">{deviceData.location}</p>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">{deviceIdDisplay}</h1>
+            <p className="text-muted-foreground">{deviceData.location}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Link href={`/rooms/${room}`}>
+              <Button variant="ghost" size="sm" className="w-full">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+            </Link>
+            <Button
+              onClick={handleExportReport}
+              className="flex items-center gap-2 bg-black text-white hover:bg-gray-800 w-full"
+              size="sm"
+            >
+              <Download className="h-4 w-4" />
+              Export Report
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Side by side layout: Electrical Parameters (75%) and Device Status (25%) */}
+      {/* Electrical Parameters Chart - Top */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
         {/* Electrical Parameters Chart - 75% width */}
         <div className="lg:col-span-3 flex">
@@ -182,6 +277,197 @@ export default function DevicePage({ params }: DevicePageProps) {
           </Card>
         </div>
       </div>
+
+      {/* Temperature and Humidity Graph - Bottom */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Temperature & Humidity Trends
+              </CardTitle>
+              <CardDescription>
+                Monitor temperature and humidity over time for {deviceIdDisplay}
+              </CardDescription>
+            </div>
+            <div className="flex gap-1">
+              {timeRanges.map((range) => (
+                <Button
+                  key={range.value}
+                  variant={timeRange === range.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleTimeRangeChange(range.value)}
+                >
+                  {range.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 relative">
+            {/* SVG Line Chart */}
+            <svg viewBox="0 0 800 320" className="w-full h-full">
+              {/* Grid Lines */}
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <line
+                  key={`h-${i}`}
+                  x1="60"
+                  y1={40 + i * 40}
+                  x2="740"
+                  y2={40 + i * 40}
+                  stroke="#e5e7eb"
+                  strokeWidth="1"
+                />
+              ))}
+              
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <line
+                  key={`v-${i}`}
+                  x1={60 + i * 85}
+                  y1="40"
+                  x2={60 + i * 85}
+                  y2="280"
+                  stroke="#e5e7eb"
+                  strokeWidth="1"
+                />
+              ))}
+              
+              {/* Temperature Line */}
+              <polyline
+                points={chartData.temperature.slice(0, 9).map((temp, i) => 
+                  `${60 + i * 85},${280 - (temp - 15) * 20}`
+                ).join(' ')}
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth="2.5"
+              />
+              
+              {/* Humidity Line */}
+              <polyline
+                points={chartData.humidity.slice(0, 9).map((humidity, i) => 
+                  `${60 + i * 85},${280 - (humidity - 30) * 8}`
+                ).join(' ')}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="2.5"
+              />
+              
+              {/* Data Points for Temperature */}
+              {chartData.temperature.slice(0, 9).map((temp, i) => (
+                <circle
+                  key={`temp-${i}`}
+                  cx={60 + i * 85}
+                  cy={280 - (temp - 15) * 20}
+                  r="3"
+                  fill="#ef4444"
+                />
+              ))}
+              
+              {/* Data Points for Humidity */}
+              {chartData.humidity.slice(0, 9).map((humidity, i) => (
+                <circle
+                  key={`humidity-${i}`}
+                  cx={60 + i * 85}
+                  cy={280 - (humidity - 30) * 8}
+                  r="3"
+                  fill="#3b82f6"
+                />
+              ))}
+              
+              {/* Left Y-axis labels (Temperature) */}
+              {[30, 25, 20, 15].map((temp) => (
+                <text
+                  key={`temp-label-${temp}`}
+                  x="45"
+                  y={280 - (temp - 15) * 20 + 5}
+                  textAnchor="end"
+                  className="text-xs fill-gray-600"
+                >
+                  {temp}
+                </text>
+              ))}
+              
+              {/* Right Y-axis labels (Humidity) */}
+              {[70, 60, 50, 40].map((humidity) => (
+                <text
+                  key={`humidity-label-${humidity}`}
+                  x="755"
+                  y={280 - (humidity - 30) * 8 + 5}
+                  textAnchor="start"
+                  className="text-xs fill-blue-600"
+                >
+                  {humidity}
+                </text>
+              ))}
+              
+              {/* X-axis labels */}
+              {chartData.labels.slice(0, 9).map((label, i) => (
+                <text
+                  key={`label-${i}`}
+                  x={60 + i * 85}
+                  y="300"
+                  textAnchor="middle"
+                  className="text-xs fill-gray-600"
+                >
+                  {label}
+                </text>
+              ))}
+              
+              {/* Axis Labels */}
+              <text x="25" y="160" textAnchor="middle" className="text-xs fill-red-600" transform="rotate(-90 25 160)">
+                Temperature (°C)
+              </text>
+              <text x="775" y="160" textAnchor="middle" className="text-xs fill-blue-600" transform="rotate(90 775 160)">
+                Humidity (%)
+              </text>
+            </svg>
+            
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-8 mt-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-0.5 bg-red-500 rounded"></div>
+                <span className="text-sm font-medium">Temperature</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-0.5 bg-blue-500 rounded"></div>
+                <span className="text-sm font-medium">Humidity</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Maintenance Info Card */}
+      <Card className="bg-white dark:bg-white border-gray-200">
+        <CardHeader>
+          <CardTitle className="text-gray-900">Maintenance Info</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Last Service */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+              <span className="text-gray-600">Last Service</span>
+              <span className="text-gray-900 font-semibold">{deviceData.lastService}</span>
+            </div>
+
+            {/* Next Service Due */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+              <span className="text-gray-600">Next Service Due</span>
+              <span className="text-gray-900 font-semibold">{deviceData.nextServiceDue}</span>
+            </div>
+
+            {/* Warranty Status */}
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Warranty Status</span>
+              <Badge className="bg-green-100 text-green-700 border-green-300">
+                {deviceData.warrantyStatus}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
