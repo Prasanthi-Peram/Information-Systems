@@ -2,13 +2,15 @@ import os
 import psycopg
 import pandas as pd
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 
 # Enable database only if connection details are provided
 DB_ENABLED = bool(os.getenv("DB_HOST") and os.getenv("DB_USER"))
 
-# =============================
+
 # CONNECTION
-# =============================
+
+
 def get_db_connection():
     return psycopg.connect(
         host=os.getenv("DB_HOST", "localhost"),
@@ -31,9 +33,10 @@ def get_db_cursor():
         cur.close()
         conn.close()
 
-# =============================
+
 # TELEMETRY
-# =============================
+
+
 def insert_device_telemetry(data: dict):
     if not DB_ENABLED:
         return
@@ -54,9 +57,10 @@ def insert_device_telemetry(data: dict):
             data,
         )
 
-# =============================
+
 # SERVICE DATES
-# =============================
+
+
 def fetch_service_dates():
     if not DB_ENABLED:
         return pd.DataFrame(columns=[
@@ -67,17 +71,62 @@ def fetch_service_dates():
         with get_db_connection() as conn:
             return pd.read_sql("SELECT * FROM ac_service", conn)
     except Exception as e:
-        print(f"⚠️  DB Error fetching service dates: {e}")
+        print("DB Error fetching service dates:", e)
         return pd.DataFrame(columns=[
             "device_id", "last_service_date", "next_service_date"
         ])
 
-# =============================
+
+# 🔥 SMART SERVICE SCHEDULER
+
+
+def update_service_schedule(device_id: str, health_score: float, critical_alert: int):
+    """
+    ML-based adaptive service scheduling
+    """
+
+    if not DB_ENABLED:
+        print(f"[Schedule] {device_id} | Health={health_score} | Critical={critical_alert}")
+        return
+
+    today = datetime.utcnow().date()
+
+    # Intelligent scheduling logic
+    if critical_alert == 1:
+        next_service = today + timedelta(days=3)
+    elif health_score < 40:
+        next_service = today + timedelta(days=7)
+    elif health_score < 70:
+        next_service = today + timedelta(days=30)
+    else:
+        next_service = today + timedelta(days=90)
+
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ac_service (device_id, last_service_date, next_service_date)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (device_id)
+                DO UPDATE SET
+                    last_service_date = EXCLUDED.last_service_date,
+                    next_service_date = EXCLUDED.next_service_date
+                """,
+                (device_id, today, next_service),
+            )
+
+        print(f"Service updated for {device_id} → {next_service}")
+
+    except Exception as e:
+        print("Service scheduling error:", e)
+
+
 # ML FEEDBACK
-# =============================
+
+
 def save_ml_feedback(device_id, time_stamp, feedback):
     if not DB_ENABLED:
-        print(f"📝 Feedback: {device_id} | {time_stamp} | {feedback}")
+        print(f"Feedback: {device_id} | {time_stamp} | {feedback}")
         return
 
     try:
@@ -89,6 +138,7 @@ def save_ml_feedback(device_id, time_stamp, feedback):
                 """,
                 (device_id, time_stamp, feedback),
             )
-        print(f"✅ Feedback saved: {device_id} - {feedback}")
+        print(f"Feedback saved: {device_id} - {feedback}")
+
     except Exception as e:
-        print(f"❌ Error saving feedback: {e}")
+        print("Error saving feedback:", e)

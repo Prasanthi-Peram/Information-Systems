@@ -60,7 +60,7 @@ export default function DashboardPage() {
      WEBSOCKET HANDLER
   -------------------------------- */
   const onWSMessage = useCallback((payload: any[] | any) => {
-    console.log('📩 WS payload:', payload)
+    console.log('WS payload:', payload)
 
     const rows = Array.isArray(payload) ? payload : [payload]
     if (!rows.length) return
@@ -102,7 +102,7 @@ export default function DashboardPage() {
   if (!wsConnected) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        🔌 Connecting to ML WebSocket…
+        Connecting to ML WebSocket…
       </div>
     )
   }
@@ -110,7 +110,7 @@ export default function DashboardPage() {
   if (liveCount === 0) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        ⏳ Waiting for ML data…
+        Waiting for ML data…
       </div>
     )
   }

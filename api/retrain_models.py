@@ -37,10 +37,10 @@ def retrain():
         conn.close()
 
         if len(df) < 30:
-            logger.info(f"⏭️  Skipping retrain: only {len(df)} false alarm samples (need 30+)")
+            logger.info(f" Skipping retrain: only {len(df)} false alarm samples (need 30+)")
             return
 
-        logger.info(f"📊 Retraining with {len(df)} false alarm samples")
+        logger.info(f"Retraining with {len(df)} false alarm samples")
 
         # Load scaler and prepare features
         scaler = joblib.load(MODEL_DIR / "scaler.joblib")
@@ -51,10 +51,10 @@ def retrain():
         iso.fit(X)
         joblib.dump(iso, MODEL_DIR / "iso_model.joblib")
 
-        logger.info(f"✅ Model retraining complete. Saved to {MODEL_DIR / 'iso_model.joblib'}")
+        logger.info(f"Model retraining complete. Saved to {MODEL_DIR / 'iso_model.joblib'}")
 
     except Exception as e:
-        logger.error(f"❌ Retrain error: {e}")
+        logger.error(f" Retrain error: {e}")
 
 if __name__ == "__main__":
     retrain()

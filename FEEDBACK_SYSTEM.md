@@ -70,7 +70,7 @@ save_ml_feedback() (api/db.py)
        ↓
 Insert into ml_feedback table
        ↓
-Logged with emoji: 📝 Feedback: device_id | timestamp | feedback
+Logged with emoji: Feedback: device_id | timestamp | feedback
 ```
 
 ### Step 3: Retrain Model (Manual or Automated)
@@ -286,10 +286,10 @@ api/models/
 ### View Feedback Logs
 Check backend console for feedback messages:
 ```
-✅ Feedback saved: A200AC01 - false_alarm
-🎯 Received feedback: false_alarm for A200AC01
-🔄 Starting model retraining...
-📊 Retraining with 15 false alarm samples
+Feedback saved: A200AC01 - false_alarm
+Received feedback: false_alarm for A200AC01
+Starting model retraining...
+Retraining with 15 false alarm samples
 ```
 
 ### Check Database
@@ -333,10 +333,10 @@ payload["Time_Stamp"] = payload["Time_Stamp"].astype(str)
 ## Summary
 
 The complete feedback loop enables:
-1. ✅ Users report false predictions
-2. ✅ Data stored securely in database
-3. ✅ Model retraining with corrected data
-4. ✅ Improved future predictions
-5. ✅ Visible statistics in dashboard
+1. Users report false predictions
+2. Data stored securely in database
+3. Model retraining with corrected data
+4. Improved future predictions
+5. Visible statistics in dashboard
 
 This creates a continuous improvement cycle for the ML model!

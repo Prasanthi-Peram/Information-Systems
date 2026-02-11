@@ -1,12 +1,8 @@
--- ============================
 -- EXTENSIONS
--- ============================
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ============================
 -- DEVICE TELEMETRY (TIMESERIES)
--- ============================
 CREATE TABLE IF NOT EXISTS device_telemetry (
     time_stamp        TIMESTAMPTZ NOT NULL,
     device_id         TEXT NOT NULL,
@@ -31,9 +27,7 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
--- ============================
 -- USERS
--- ============================
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255) NOT NULL UNIQUE,
@@ -44,9 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- ============================
 -- AC SERVICE DATES
--- ============================
 CREATE TABLE IF NOT EXISTS ac_service (
     device_id TEXT PRIMARY KEY,
     last_service_date DATE,
@@ -62,9 +54,7 @@ INSERT INTO ac_service VALUES
 ('NR422AC01','2025-12-05','2026-03-05')
 ON CONFLICT (device_id) DO NOTHING;
 
--- ============================
 -- ML FEEDBACK
--- ============================
 CREATE TABLE IF NOT EXISTS ml_feedback (
     id SERIAL PRIMARY KEY,
     device_id TEXT NOT NULL,

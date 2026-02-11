@@ -16,31 +16,31 @@ export function useWebSocket(
       ? url
       : `ws://${window.location.hostname}:8000${url}`
 
-    console.log('🔌 Connecting to WebSocket:', wsUrl)
+    console.log('Connecting to WebSocket:', wsUrl)
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
-      console.log('✅ WebSocket connected')
+      console.log('WebSocket connected')
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('📩 WS payload:', data)
+        console.log('WS payload:', data)
         onMessage(data)
       } catch (err) {
-        console.error('❌ WS parse error', err)
+        console.error(' WS parse error', err)
       }
     }
 
     ws.onerror = (err) => {
-      console.error('❌ WebSocket error', err)
+      console.error(' WebSocket error', err)
     }
 
     ws.onclose = () => {
-      console.warn('⚠️ WebSocket closed')
+      console.warn('WebSocket closed')
     }
 
     return () => {

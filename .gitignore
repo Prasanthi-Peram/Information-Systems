@@ -42,3 +42,15 @@ next-env.d.ts
 
 __pycache__/
 .next/
+
+# Python
+.venv/
+.venv310/
+api/.venv310/
+__pycache__/
+*.pyc
+*.pyo
+
+# ML models
+api/models/
+*.joblib

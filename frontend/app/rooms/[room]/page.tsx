@@ -43,11 +43,11 @@ export default function RoomPage({ params }: Props) {
   useWebSocket(`/ws/room/${roomName}`, onWSMessage)
 
   if (!connected) {
-    return <div className="p-6">🔌 Connecting to ML…</div>
+    return <div className="p-6">Connecting to ML…</div>
   }
 
   if (!acList || acList.length === 0) {
-    return <div className="p-6">⏳ Waiting for AC data…</div>
+    return <div className="p-6">Waiting for AC data…</div>
   }
 
   const roomACs = acList.filter(ac => (ac.Device_ID || '').toUpperCase().includes(roomName))

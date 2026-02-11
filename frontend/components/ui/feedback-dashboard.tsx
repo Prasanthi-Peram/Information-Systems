@@ -26,7 +26,7 @@ export default function FeedbackDashboard() {
       const data = await res.json()
       setStats(data)
     } catch (err) {
-      console.error('❌ Failed to fetch stats:', err)
+      console.error(' Failed to fetch stats:', err)
     }
   }
 
@@ -36,10 +36,10 @@ export default function FeedbackDashboard() {
     try {
       const res = await fetch('/ml/retrain', { method: 'POST' })
       const data = await res.json()
-      setMessage(`✅ ${data.message}`)
+      setMessage(`${data.message}`)
       setTimeout(fetchStats, 1000)
     } catch (err) {
-      setMessage(`❌ Retraining failed: ${err}`)
+      setMessage(` Retraining failed: ${err}`)
     } finally {
       setRetraining(false)
     }
@@ -85,7 +85,7 @@ export default function FeedbackDashboard() {
           {/* LEARNING FLOW */}
           <div className="p-4 rounded-lg bg-purple-50 border border-purple-200">
             <div className="text-sm text-purple-900">
-              <strong>🧠 How the Model Learns:</strong>
+              <strong>How the Model Learns:</strong>
               <div className="mt-3 space-y-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-purple-600">1️⃣</span>
@@ -93,7 +93,7 @@ export default function FeedbackDashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-purple-600">2️⃣</span>
-                  <span>You click <strong>"🚫 False Alarm"</strong> or <strong>"✅ Correct"</strong></span>
+                  <span>You click <strong>"False Alarm"</strong> or <strong>"Correct"</strong></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-purple-600">3️⃣</span>
@@ -114,7 +114,7 @@ export default function FeedbackDashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-purple-600">5️⃣</span>
-                  <span>Next alerts are smarter and more accurate! ✨</span>
+                  <span>Next alerts are smarter and more accurate! </span>
                 </div>
               </div>
             </div>
@@ -123,13 +123,13 @@ export default function FeedbackDashboard() {
           {/* INFO */}
           <div className="p-4 rounded-lg bg-amber-50 border border-amber-200">
             <div className="text-sm text-amber-900">
-              <strong>ℹ️ Key Points:</strong>
+              <strong>Key Points:</strong>
               <ul className="mt-2 space-y-1 ml-4 list-disc">
-                <li>✅ Feedback saved immediately when you click "False Alarm" or "Correct"</li>
-                <li>📊 See stats above showing model's learning progress</li>
-                <li>🧠 Once 30+ false alarms are collected, model can retrain</li>
-                <li>🎯 Retraining improves model accuracy for future predictions</li>
-                <li>⚡ Auto-refresh every 5 seconds to show real-time stats</li>
+                <li>Feedback saved immediately when you click "False Alarm" or "Correct"</li>
+                <li>See stats above showing model's learning progress</li>
+                <li>Once 30+ false alarms are collected, model can retrain</li>
+                <li>Retraining improves model accuracy for future predictions</li>
+                <li>Auto-refresh every 5 seconds to show real-time stats</li>
               </ul>
             </div>
           </div>
@@ -142,9 +142,9 @@ export default function FeedbackDashboard() {
           }`}>
             <div className="text-sm font-medium">
               {falseAlarmCount >= 30 ? (
-                <>✅ Model Ready to Retrain ({falseAlarmCount} false alarms collected)</>
+                <>Model Ready to Retrain ({falseAlarmCount} false alarms collected)</>
               ) : (
-                <>⏳ Collecting False Alarms... {falseAlarmCount}/30 needed to retrain</>
+                <>Collecting False Alarms... {falseAlarmCount}/30 needed to retrain</>
               )}
             </div>
             <div className="mt-2 w-full bg-gray-300 rounded-full h-2">
@@ -169,7 +169,7 @@ export default function FeedbackDashboard() {
               }`}
             >
               <Zap size={18} />
-              {retraining ? '🔄 Retraining in progress...' : '🚀 Trigger Model Retraining'}
+              {retraining ? 'Retraining in progress...' : ' Trigger Model Retraining'}
             </button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Requires 30+ false alarms to retrain. Currently: {falseAlarmCount}
@@ -179,7 +179,7 @@ export default function FeedbackDashboard() {
           {/* MESSAGE */}
           {message && (
             <div className={`p-3 rounded text-sm ${
-              message.startsWith('✅')
+              message.startsWith('')
                 ? 'bg-green-100 text-green-800'
                 : 'bg-red-100 text-red-800'
             }`}>
