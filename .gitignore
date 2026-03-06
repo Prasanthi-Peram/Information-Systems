@@ -42,3 +42,21 @@ next-env.d.ts
 
 __pycache__/
 .next/
+
+fastapi
+uvicorn[standard]
+psycopg[binary,pool]
+mlflow
+apscheduler
+
+pandas
+numpy
+scikit-learn
+joblib
+websockets
+
+# MLflow
+mlflow.db
+mlruns/
+mlflow_data/
+mlflow_artifacts/
