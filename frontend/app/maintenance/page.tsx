@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -13,6 +14,8 @@ import {
 import { UserCheck, Calendar, Users, FileDown, ArrowLeft, Download } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { downloadPdfReport } from '@/lib/pdf-utils'
+import { getMockDeviceData, exportDeviceReport, DeviceData } from '@/lib/device-utils'
 
 interface MaintenanceRecord {
   id: string
@@ -31,15 +34,17 @@ interface Technician {
   name: string
   specialization: string
   available: boolean
+  phone?: string
+  email?: string
 }
 
 const technicians: Technician[] = [
-  { id: 'tech1', name: 'John Smith', specialization: 'HVAC', available: true },
-  { id: 'tech2', name: 'Sarah Johnson', specialization: 'Refrigeration', available: true },
-  { id: 'tech3', name: 'Mike Wilson', specialization: 'Electrical', available: true },
-  { id: 'tech4', name: 'Emily Davis', specialization: 'General Maintenance', available: false },
-  { id: 'tech5', name: 'Robert Brown', specialization: 'HVAC', available: true },
-  { id: 'tech6', name: 'Lisa Chen', specialization: 'Controls', available: true },
+  { id: 'tech1', name: 'John Smith', specialization: 'HVAC', available: true, phone: '000-000-0000', email: 'john@example.com' },
+  { id: 'tech2', name: 'Sarah Johnson', specialization: 'Refrigeration', available: true, phone: '000-000-0000', email: 'sarah@example.com' },
+  { id: 'tech3', name: 'Mike Wilson', specialization: 'Electrical', available: true, phone: '000-000-0000', email: 'mike@example.com' },
+  { id: 'tech4', name: 'Emily Davis', specialization: 'General Maintenance', available: false, phone: '000-000-0000', email: 'emily@example.com' },
+  { id: 'tech5', name: 'Robert Brown', specialization: 'HVAC', available: true, phone: '000-000-0000', email: 'robert@example.com' },
+  { id: 'tech6', name: 'Lisa Chen', specialization: 'Controls', available: true, phone: '000-000-0000', email: 'lisa@example.com' },
 ]
 
 const initialItems: MaintenanceRecord[] = [
@@ -118,80 +123,56 @@ export default function MaintenancePage() {
   const [selectedTechnician, setSelectedTechnician] = useState<string>('')
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState<string | null>(null)
+  const [techniciansList, setTechniciansList] = useState<Technician[]>(technicians)
+  const [showAddTechnicianDialog, setShowAddTechnicianDialog] = useState(false)
+  const [newTechnician, setNewTechnician] = useState({ name: '', specialization: '', phone: '', email: '' })
+  const [adminPassword, setAdminPassword] = useState('')
 
   const handleExportPageReport = () => {
-    const reports = [
-      ...items.map(item => ({
-        deviceInfo: {
-          deviceId: item.deviceId,
-          location: item.room,
-          generatedAt: new Date().toISOString(),
-        },
-        deviceStatus: {
-          status: 'Pending Maintenance',
-          performance: '75%',
-          condition: 'Fair',
-          runtimeToday: '8 hours',
-          totalHours: '2500h',
-          temperature: '22°C',
-          humidity: '45%',
-          current: '5.2A',
-          voltage: '230V',
-          powerConsumption: '1.2 kW',
-        },
-        maintenanceInfo: {
-          lastService: item.lastService,
-          nextServiceDue: item.nextService,
-          warrantyStatus: item.criticality === 'High' ? 'Needs Attention' : 'Active',
-          issue: item.issue,
-        },
-      })),
-      ...assignedItems.map(item => ({
-        deviceInfo: {
-          deviceId: item.deviceId,
-          location: item.room,
-          generatedAt: new Date().toISOString(),
-        },
-        deviceStatus: {
-          status: 'Under Maintenance',
-          performance: '75%',
-          condition: 'Fair',
-          runtimeToday: '6 hours',
-          totalHours: '2500h',
-          temperature: '22°C',
-          humidity: '45%',
-          current: '5.2A',
-          voltage: '230V',
-          powerConsumption: '1.2 kW',
-        },
-        maintenanceInfo: {
-          lastService: item.lastService,
-          nextServiceDue: item.nextService,
-          warrantyStatus: item.criticality === 'High' ? 'Needs Attention' : 'Active',
-          issue: item.issue,
-          assignedTechnician: item.technician || 'Not Assigned',
-        },
-      }))
-    ]
+    const dateStr = new Date().toISOString().split('T')[0]
 
-    const reportData = {
-      generatedAt: new Date().toISOString(),
-      totalDevices: reports.length,
-      pendingCount: items.length,
-      assignedCount: assignedItems.length,
-      reports: reports
-    }
+    const pendingLines = items.length
+      ? items.map((item) =>
+          `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}]`
+        )
+      : ['No pending maintenance items.']
 
-    const jsonString = JSON.stringify(reportData, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `maintenance_board_report_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const assignedLines = assignedItems.length
+      ? assignedItems.map((item) =>
+          `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${
+            item.technician || 'Not Assigned'
+          }`
+        )
+      : ['No assigned maintenance items.']
+
+    downloadPdfReport(
+      `maintenance_board_report_${dateStr}.pdf`,
+      'Maintenance Board Report',
+      [
+        {
+          title: 'Summary',
+          lines: [
+            `Report Date: ${dateStr}`,
+            `Total Devices: ${items.length + assignedItems.length}`,
+            `Pending Tasks: ${items.length}`,
+            `Assigned Tasks: ${assignedItems.length}`,
+          ],
+        },
+        {
+          title: 'Pending Maintenance',
+          lines: pendingLines,
+        },
+        {
+          title: 'Assigned Maintenance',
+          lines: assignedLines,
+        },
+      ]
+    )
+  }
+
+  const handleExportReport = (item: MaintenanceRecord) => {
+    const deviceData: DeviceData = getMockDeviceData(item.deviceId, item.room)
+    exportDeviceReport(deviceData)
   }
 
   useEffect(() => {
@@ -247,7 +228,7 @@ export default function MaintenancePage() {
 
   const handleAssignTechnician = () => {
     if (showTechnicianDialog && selectedTechnician) {
-      const technician = technicians.find(t => t.id === selectedTechnician)
+      const technician = techniciansList.find(t => t.id === selectedTechnician)
       const itemToAssign = items.find(item => item.id === showTechnicianDialog)
       
       if (itemToAssign && technician) {
@@ -297,92 +278,35 @@ export default function MaintenancePage() {
     setShowCancelDialog(null)
   }
 
-  const handleExportReport = (item: MaintenanceRecord) => {
-    const reportData = {
-      deviceInfo: {
-        deviceId: item.deviceId,
-        location: item.room,
-        generatedAt: new Date().toISOString(),
-      },
-      deviceStatus: {
-        status: 'Active',
-        performance: '85%',
-        condition: 'Good',
-        runtimeToday: '8 hours',
-        totalHours: '2500h',
-        temperature: '22°C',
-        humidity: '45%',
-        current: '5.2A',
-        voltage: '230V',
-        powerConsumption: '1.2 kW',
-      },
-      maintenanceInfo: {
-        lastService: item.lastService,
-        nextServiceDue: item.nextService,
-        warrantyStatus: item.criticality === 'High' ? 'Needs Attention' : 'Active',
-        issue: item.issue,
-        assignedTechnician: item.technician || 'Not Assigned',
-      },
-    }
-
-    const jsonString = JSON.stringify(reportData, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${item.deviceId}_report_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
+  
   const handleExportAllReport = () => {
     if (assignedItems.length === 0) return
     
-    const reports = assignedItems.map(item => ({
-      deviceInfo: {
-        deviceId: item.deviceId,
-        location: item.room,
-        generatedAt: new Date().toISOString(),
-      },
-      deviceStatus: {
-        status: 'Active',
-        performance: '85%',
-        condition: 'Good',
-        runtimeToday: '8 hours',
-        totalHours: '2500h',
-        temperature: '22°C',
-        humidity: '45%',
-        current: '5.2A',
-        voltage: '230V',
-        powerConsumption: '1.2 kW',
-      },
-      maintenanceInfo: {
-        lastService: item.lastService,
-        nextServiceDue: item.nextService,
-        warrantyStatus: item.criticality === 'High' ? 'Needs Attention' : 'Active',
-        issue: item.issue,
-        assignedTechnician: item.technician || 'Not Assigned',
-      },
-    }))
+    const dateStr = new Date().toISOString().split('T')[0]
 
-    const reportData = {
-      generatedAt: new Date().toISOString(),
-      totalDevices: reports.length,
-      reports: reports
-    }
+    const lines = assignedItems.map((item) =>
+      `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${
+        item.technician || 'Not Assigned'
+      }`
+    )
 
-    const jsonString = JSON.stringify(reportData, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `all-maintenance-report_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    downloadPdfReport(
+      `all-maintenance-report_${dateStr}.pdf`,
+      'All Assigned Maintenance Report',
+      [
+        {
+          title: 'Summary',
+          lines: [
+            `Report Date: ${dateStr}`,
+            `Total Assigned Devices: ${assignedItems.length}`,
+          ],
+        },
+        {
+          title: 'Assigned Maintenance',
+          lines,
+        },
+      ]
+    )
   }
 
   const handleDeleteConfirm = () => {
@@ -493,9 +417,21 @@ export default function MaintenancePage() {
       {showTechnicianDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full">
-            <h3 className="text-lg font-semibold mb-4">Assign Technician</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Assign Technician</h3>
+              <button
+                onClick={() => {
+                  setAdminPassword('')
+                  setShowAddTechnicianDialog(true)
+                }}
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Add
+              </button>
+            </div>
             <div className="space-y-3">
-              {technicians.map(technician => (
+              {techniciansList.map(technician => (
                 <div key={technician.id} className="flex items-center space-x-3">
                   <input
                     type="radio"
@@ -518,7 +454,7 @@ export default function MaintenancePage() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="flex items-center justify-between gap-2 mt-4">
               <button
                 onClick={() => setShowTechnicianDialog(null)}
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -537,6 +473,99 @@ export default function MaintenancePage() {
           </div>
         </div>
       )}
+
+      {showAddTechnicianDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-w-full">
+            <h3 className="text-lg font-semibold mb-4">Add New Technician</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  placeholder="Enter technician name"
+                  value={newTechnician.name}
+                  onChange={(e) => setNewTechnician(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  placeholder="Enter phone number"
+                  value={newTechnician.phone}
+                  onChange={(e) => setNewTechnician(prev => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email (optional)</label>
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  type="email"
+                  placeholder="Enter email address"
+                  value={newTechnician.email}
+                  onChange={(e) => setNewTechnician(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Specialization</label>
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  placeholder="e.g., HVAC, Electrical"
+                  value={newTechnician.specialization}
+                  onChange={(e) => setNewTechnician(prev => ({ ...prev, specialization: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Admin Password</label>
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  type="password"
+                  placeholder="Enter admin password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-4">
+              <button
+                onClick={() => setShowAddTechnicianDialog(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!newTechnician.name || !newTechnician.phone || !newTechnician.specialization) return
+                  const id = `tech-${Date.now()}`
+                  const added: Technician = {
+                    id,
+                    name: newTechnician.name,
+                    specialization: newTechnician.specialization,
+                    available: true,
+                    phone: newTechnician.phone,
+                    email: newTechnician.email || undefined,
+                  }
+                  setTechniciansList(prev => [...prev, added])
+                  setNewTechnician({ name: '', specialization: '', phone: '', email: '' })
+                  setAdminPassword('')
+                  setShowAddTechnicianDialog(false)
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                disabled={
+                  !newTechnician.name ||
+                  !newTechnician.phone ||
+                  !newTechnician.specialization ||
+                  !adminPassword
+                }
+              >
+                Save Technician
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

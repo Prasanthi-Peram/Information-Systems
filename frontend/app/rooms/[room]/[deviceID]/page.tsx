@@ -20,6 +20,8 @@ import { use } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { ChartAreaInteractive } from '@/components/ui/parameters'
+import { downloadPdfReport } from '@/lib/pdf-utils'
+import { getMockDeviceData, DeviceData, exportDeviceReport } from '@/lib/device-utils'
 
 interface DevicePageProps {
   params: Promise<{
@@ -28,8 +30,7 @@ interface DevicePageProps {
   }>
 }
 
-export default function DevicePage({ params }: DevicePageProps) {
-  const { room, deviceID } = use(params)
+export function DeviceReport({ room, deviceID }: { room: string; deviceID: string }) {
   const [timeRange, setTimeRange] = useState('24h')
   
   const roomName = room 
@@ -38,28 +39,8 @@ export default function DevicePage({ params }: DevicePageProps) {
   const deviceIdDisplay = decodeURIComponent(deviceID).toUpperCase()
   
   // Mock device data - in real app, fetch based on deviceID
-  const performance = 95
-  const condition = performance >= 90 ? 'Good' : performance >= 70 ? 'Fair' : 'Poor'
-  const conditionColor = performance >= 90 ? 'text-green-500' : performance >= 70 ? 'text-yellow-500' : 'text-red-500'
-  
-  const deviceData = {
-    deviceId: deviceIdDisplay,
-    location: 'Conference Room A',
-    status: 'ON',
-    temperature: 22.5,
-    current: 8.5,
-    voltage: 230,
-    hoursToday: 6.5,
-    totalHoursOperated: 1245.5,
-    performance,
-    condition,
-    conditionColor,
-    humidity: 55,
-    powerConsumption: 2.4,
-    lastService: '15 days ago',
-    nextServiceDue: '75 days',
-    warrantyStatus: 'Active',
-  }
+  // use shared mock data function to ensure exports match maintenance page
+  const deviceData: DeviceData = getMockDeviceData(deviceIdDisplay, roomName)
 
   // Generate mock temperature and humidity data for different time ranges
   const generateChartData = (range: string) => {
@@ -87,41 +68,7 @@ export default function DevicePage({ params }: DevicePageProps) {
   }
 
   const handleExportReport = () => {
-    const reportData = {
-      deviceInfo: {
-        deviceId: deviceData.deviceId,
-        location: deviceData.location,
-        generatedAt: new Date().toISOString(),
-      },
-      deviceStatus: {
-        status: deviceData.status,
-        performance: `${deviceData.performance}%`,
-        condition: deviceData.condition,
-        runtimeToday: `${deviceData.hoursToday} hours`,
-        totalHours: `${deviceData.totalHoursOperated}h`,
-        temperature: `${deviceData.temperature}°C`,
-        humidity: `${deviceData.humidity}%`,
-        current: `${deviceData.current}A`,
-        voltage: `${deviceData.voltage}V`,
-        powerConsumption: `${deviceData.powerConsumption} kW`,
-      },
-      maintenanceInfo: {
-        lastService: deviceData.lastService,
-        nextServiceDue: deviceData.nextServiceDue,
-        warrantyStatus: deviceData.warrantyStatus,
-      },
-    }
-
-    const jsonString = JSON.stringify(reportData, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${deviceData.deviceId}_report_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    exportDeviceReport(deviceData)
   }
 
   const timeRanges = [
@@ -470,5 +417,10 @@ export default function DevicePage({ params }: DevicePageProps) {
       </Card>
     </div>
   )
+}
+
+export default function DevicePage({ params }: DevicePageProps) {
+  const { room, deviceID } = use(params)
+  return <DeviceReport room={room} deviceID={deviceID} />
 }
 

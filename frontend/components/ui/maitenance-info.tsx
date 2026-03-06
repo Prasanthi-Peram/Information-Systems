@@ -6,6 +6,7 @@ import { useId } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -30,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { EllipsisVertical, UserCheck, Calendar, Users } from 'lucide-react'
+import { EllipsisVertical, UserCheck, Calendar, Users, Plus } from 'lucide-react'
 
 interface MaintenanceRecord {
   id: string
@@ -135,7 +136,10 @@ const TableSelectableRowDemo = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null)
   const [showTechnicianDialog, setShowTechnicianDialog] = useState<string | null>(null)
   const [selectedTechnician, setSelectedTechnician] = useState<string>('')
+  const [showAddTechnicianDialog, setShowAddTechnicianDialog] = useState(false)
+  const [newTechnician, setNewTechnician] = useState({ name: '', phone: '', email: '', specialization: '' })
   const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians)
+  const [assignmentSuccess, setAssignmentSuccess] = useState(false)
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -243,10 +247,31 @@ const TableSelectableRowDemo = () => {
           newSet.delete(showTechnicianDialog)
           return newSet
         })
+        
+        // Show success message and reset
+        setAssignmentSuccess(true)
+        setSelectedTechnician('')
+        setTimeout(() => setAssignmentSuccess(false), 2000)
+        
+        // Keep dialog open so user can add more technicians if needed
+      }
+    }
+  }
+
+  const handleAddTechnician = () => {
+    if (newTechnician.name && newTechnician.phone && newTechnician.email && newTechnician.specialization) {
+      const technicianId = `tech${Date.now()}`
+      const addedTechnician: Technician = {
+        id: technicianId,
+        name: newTechnician.name,
+        specialization: newTechnician.specialization,
+        available: true
       }
       
-      setShowTechnicianDialog(null)
-      setSelectedTechnician('')
+      setTechnicians(prev => [...prev, addedTechnician])
+      setNewTechnician({ name: '', phone: '', email: '', specialization: '' })
+      setShowAddTechnicianDialog(false)
+      // Keep the assign dialog open so user can immediately assign the newly added technician
     }
   }
 
@@ -383,7 +408,11 @@ const TableSelectableRowDemo = () => {
               Assign Technician
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Select a technician to assign to this maintenance task.
+              {assignmentSuccess ? (
+                <span className="text-green-600 font-medium">✓ Technician assigned successfully!</span>
+              ) : (
+                'Select a technician to assign to this maintenance task.'
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
@@ -409,10 +438,82 @@ const TableSelectableRowDemo = () => {
               ))}
             </div>
           </div>
+          <div className="flex items-center justify-between gap-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowAddTechnicianDialog(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Technician
+            </Button>
+            <div className="flex gap-2">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <Button onClick={handleAssignTechnician} disabled={!selectedTechnician} className="bg-green-500 hover:bg-green-600">
+                Assign
+              </Button>
+              <Button onClick={() => setShowTechnicianDialog(null)} variant="outline">
+                Done
+              </Button>
+            </div>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Technician Dialog */}
+      <AlertDialog open={showAddTechnicianDialog} onOpenChange={setShowAddTechnicianDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-blue-600" />
+              Add New Technician
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Enter the technician's information
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                placeholder="Enter technician name"
+                value={newTechnician.name}
+                onChange={(e) => setNewTechnician(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Phone Number</label>
+              <Input
+                placeholder="Enter phone number"
+                value={newTechnician.phone}
+                onChange={(e) => setNewTechnician(prev => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email Address</label>
+              <Input
+                placeholder="Enter email address"
+                type="email"
+                value={newTechnician.email}
+                onChange={(e) => setNewTechnician(prev => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Specialization</label>
+              <Input
+                placeholder="e.g., HVAC, Electrical, Refrigeration"
+                value={newTechnician.specialization}
+                onChange={(e) => setNewTechnician(prev => ({ ...prev, specialization: e.target.value }))}
+              />
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleAssignTechnician} disabled={!selectedTechnician}>
-              Assign
+            <AlertDialogAction 
+              onClick={handleAddTechnician}
+              disabled={!newTechnician.name || !newTechnician.phone || !newTechnician.email || !newTechnician.specialization}
+            >
+              Add Technician
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
