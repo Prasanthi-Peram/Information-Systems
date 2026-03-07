@@ -18,6 +18,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  mlflow:
+    image: mlflow:latest
+    ports:
+      - "${MLFLOW_PORT}:5000"
+    environment:
+      - BACKEND_STORE_URI=postgresql://postgres:${DB_PASS}@db:5432/${DB_NAME}
+      - ARTIFACT_ROOT=/mlartifacts
+    volumes:
+      - ml_artifacts:/mlartifacts
+    networks:
+      - app-net
+    command: >
+      mlflow server 
+      --backend-store-uri postgresql://postgres:${DB_PASS}@db:5432/${DB_NAME}
+      --default-artifact-root /mlartifacts 
+      --host 0.0.0.0
+    depends_on:
+      db:
+        condition: service_healthy
 
   api:
     build: ./api
@@ -28,6 +47,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: ${DB_NAME}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
     depends_on:
       db:
         condition: service_healthy
