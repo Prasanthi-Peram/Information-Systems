@@ -82,12 +82,8 @@ export default function DashboardPage() {
           {cards.map((card, i) => (
             <Card key={i}>
               <CardContent className="flex flex-col h-full p-4">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center mb-4">
                   <card.icon className={cn('size-5', card.iconColor)} />
-                  <Badge className={cn('px-2 py-0.5 rounded-full flex items-center gap-1 text-xs', card.badge.color)}>
-                    <card.badge.icon className={`w-3 h-3 ${card.badge.iconColor}`} />
-                    {card.badge.text}
-                  </Badge>
                 </div>
                 <div className="flex-1 flex flex-col justify-between grow">
                   <div>
