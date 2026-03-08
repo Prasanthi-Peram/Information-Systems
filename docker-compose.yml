@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 5
   mlflow:
-    image: mlflow:latest
+    build: ./mlflow
     ports:
       - "${MLFLOW_PORT}:5000"
     environment:
@@ -31,7 +31,7 @@ services:
       - app-net
     command: >
       mlflow server 
-      --backend-store-uri postgresql://postgres:${DB_PASS}@db:5432/${DB_NAME}
+      --backend-store-uri postgresql+psycopg2://postgres:${DB_PASS}@db:5432/${DB_NAME}
       --default-artifact-root /mlartifacts 
       --host 0.0.0.0
     depends_on:
@@ -65,6 +65,7 @@ services:
 
 volumes:
   postgres_data:
+  ml_artifacts:
 
 networks:
   app-net:
