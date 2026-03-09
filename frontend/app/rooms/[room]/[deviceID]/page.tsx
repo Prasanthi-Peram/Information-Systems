@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { use } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/ui/button'
 import { ChartAreaInteractive } from '@/components/ui/parameters'
 import { downloadPdfReport } from '@/lib/pdf-utils'
 import { getMockDeviceData, DeviceData, exportDeviceReport } from '@/lib/device-utils'

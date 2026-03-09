@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table'
 import { UserCheck, Calendar, Users, FileDown, ArrowLeft, Download } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/ui/button'
 import { downloadPdfReport } from '@/lib/pdf-utils'
 import { getMockDeviceData, exportDeviceReport, DeviceData } from '@/lib/device-utils'
 

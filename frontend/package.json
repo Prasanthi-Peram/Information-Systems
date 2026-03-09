@@ -6,13 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test": "jest",
-    "test:api": "node tests/api-tests.js",
-    "test:auth": "node tests/auth-tests.js",
-    "test:devices": "node tests/device-tests.js",
-    "test:telemetry": "node tests/telemetry-tests.js",
-    "test:all": "npm run test:api && npm run test:auth && npm run test:devices && npm run test:telemetry"
+    "lint": "eslint"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

@@ -4,7 +4,7 @@ import Image from "next/image"
 import { useActionState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormGroup,

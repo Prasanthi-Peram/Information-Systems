@@ -19,7 +19,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Button } from "@/components/ui/Button"
+import { Button } from "@/components/ui/button"
 import { signOutAction } from '@/app/actions/auth'
 
 export function AppSidebar() {
