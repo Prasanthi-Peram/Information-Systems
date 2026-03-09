@@ -16,7 +16,7 @@ from sklearn.preprocessing import StandardScaler
 
 MLFLOW_URI = "http://mlflow:5000"
 mlflow.set_tracking_uri(MLFLOW_URI)
-# Use a fresh experiment name so it picks up the new S3 bucket
+
 mlflow.set_experiment("SmartAC_Production_Models_S3")
 
 
@@ -79,7 +79,7 @@ def create_targets(df: pd.DataFrame):
 # ============================================================
 
 def main():
-    print("🚀 Starting SmartCool Training Pipeline...")
+    print("Starting SmartCool Training Pipeline...")
 
     # 1. Load data from the database via shared api.db helper
     raw_df = load_data()

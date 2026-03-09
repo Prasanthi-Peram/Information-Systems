@@ -3,14 +3,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS ac_device (
-    device_id   BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    device_id   TEXT PRIMARY KEY,
     location    TEXT NOT NULL,
     last_service TIMESTAMPTZ  DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS device_telemetry (
     time_stamp        TIMESTAMPTZ NOT NULL,
-    device_id         BIGINT NOT NULL REFERENCES ac_device(device_id) ON DELETE CASCADE,
+    device_id         TEXT NOT NULL REFERENCES ac_device(device_id) ON DELETE CASCADE,
 
     current           DOUBLE PRECISION,
     voltage           DOUBLE PRECISION,
