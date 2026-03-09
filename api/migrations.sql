@@ -41,10 +41,7 @@ CREATE TABLE IF NOT EXISTS alerts(
      alert_criticality   TEXT CHECK (alert_criticality IN ('Critical', 'Warning', 'Info')),
     recommendation TEXT,
 
-    predicted_service_date TIMESTAMPTZ DEFAULT NULL,
-    CONSTRAINT fk_telemetry_alerts 
-    FOREIGN KEY (time_stamp, device_id) 
-    REFERENCES device_telemetry (time_stamp, device_id) ON DELETE CASCADE
+    predicted_service_date TIMESTAMPTZ DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS ml_predictions (
@@ -59,10 +56,7 @@ CREATE TABLE IF NOT EXISTS ml_predictions (
     
     --ground_truth        INT,
     --is_error            BOOLEAN DEFAULT FALSE,
-    model_version       TEXT,
-    CONSTRAINT fk_telemetry_predictions 
-    FOREIGN KEY (time_stamp, device_id) 
-    REFERENCES device_telemetry (time_stamp, device_id) ON DELETE CASCADE
+    model_version       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (
