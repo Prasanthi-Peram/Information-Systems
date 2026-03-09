@@ -17,9 +17,9 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
   SidebarFooter,
-} from "@/components/ui/sidebar"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Button } from "@/components/ui/button"
+} from "@/components/ui/Sidebar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible"
+import { Button } from "@/components/ui/Button"
 import { signOutAction } from '@/app/actions/auth'
 
 export function AppSidebar() {

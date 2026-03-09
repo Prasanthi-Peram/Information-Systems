@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/Button'
 import { ArrowLeft } from 'lucide-react'
 
 export default function SelectRolePage() {

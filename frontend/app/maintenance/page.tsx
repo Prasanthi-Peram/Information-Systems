@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/ui/Badge'
 import {
   Table,
   TableBody,
@@ -10,10 +10,10 @@ import {
   TableHead,
   TableHeader,
   TableRow
-} from '@/components/ui/table'
+} from '@/components/ui/Table'
 import { UserCheck, Calendar, Users, FileDown, ArrowLeft, Download } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/Button'
 import { downloadPdfReport } from '@/lib/pdf-utils'
 import { getMockDeviceData, exportDeviceReport, DeviceData } from '@/lib/device-utils'
 

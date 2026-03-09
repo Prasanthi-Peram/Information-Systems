@@ -1,11 +1,11 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/Badge'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { SunSnow, Zap, Briefcase, ArrowUpRight, AlertCircle, Calendar, Users, X, ArrowLeft, Thermometer, Droplets } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { HealthChart } from '@/components/ui/health-chart'
-import { ChartAreaInteractive } from '@/components/ui/parameters'
+import { HealthChart } from '@/components/ui/Health-chart'
+import { ChartAreaInteractive } from '@/components/ui/Parameters'
 import { useState, useEffect } from 'react'
 
 interface MaintenanceRecord {

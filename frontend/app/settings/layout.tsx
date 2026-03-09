@@ -1,8 +1,8 @@
-import { AppSidebar } from "@/components/ui/app-sidebar"
+import { AppSidebar } from "@/components/ui/App-sidebar"
 import {
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/Sidebar"
 
 export default function SettingsLayout({
   children,

@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
 import { 
   Thermometer, 
   Droplets, 
@@ -18,8 +18,8 @@ import {
 import { cn } from '@/lib/utils'
 import { use } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { ChartAreaInteractive } from '@/components/ui/parameters'
+import { Button } from '@/components/ui/Button'
+import { ChartAreaInteractive } from '@/components/ui/Parameters'
 import { downloadPdfReport } from '@/lib/pdf-utils'
 import { getMockDeviceData, DeviceData, exportDeviceReport } from '@/lib/device-utils'
 
