@@ -35,7 +35,7 @@ export async function verifyPassword(
     if (Buffer.isBuffer(stored)) return stored.toString('utf8')
 
     const s = String(stored)
- 
+
     if (s.startsWith('\\x')) {
       return Buffer.from(s.slice(2), 'hex').toString('utf8')
     }
@@ -51,23 +51,24 @@ type DbUser = {
   password: Uint8Array | string
   name?: string | null
   avatar?: string | null
+  role?: string | null
+  campus_id?: string | null
   created_at?: string
 }
 
 
 // Get user by email
 export async function getUserByEmail(email: string): Promise<DbUser | null> {
-  const client = await pool.connect()
   try {
-    const result = await client.query(
-      'SELECT id, email, password, name, avatar, created_at FROM users WHERE email = $1',
+    const result = await pool.query(
+      `SELECT id, email, password, name, avatar, role, campus_id, created_at 
+       FROM users WHERE email = $1`,
       [email]
     )
     return result.rows[0] as DbUser | null
   } catch (error) {
+    console.error('Database error in getUserByEmail:', error instanceof Error ? error.message : 'Unknown error')
     throw new Error(error instanceof Error ? error.message : 'Database error')
-  } finally {
-    client.release()
   }
 }
 
@@ -77,27 +78,42 @@ export async function createUser(
   email: string,
   password: string,
   username: string,
+  role: string,
+  campusId: string | null = null,
   avatar: string | null = null
 ): Promise<{ id: string; email: string } | null> {
-  const client = await pool.connect()
   try {
     const hashedPassword = await hashPassword(password)
     const nowIso = new Date().toISOString()
     const id = crypto.randomUUID()
 
-    const result = await client.query(
-      `INSERT INTO users (id, email, password, name, avatar, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, email`,
-      [id, email, hashedPassword, username, avatar, nowIso]
-    )
+    let result
+    try {
+      result = await pool.query(
+        `INSERT INTO users (id, email, password, name, avatar, role, campus_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, email`,
+        [id, email, hashedPassword, username, avatar, role, campusId, nowIso]
+      )
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('column')) {
+        if (error.message.includes('role')) {
+          console.error('Role column does not exist in database. Please run: ALTER TABLE users ADD COLUMN role VARCHAR(20);')
+          throw new Error('Database schema error: role column is missing. Please add the role column to the users table.')
+        } else if (error.message.includes('campus_id')) {
+          console.error('Campus ID column does not exist in database. Please run: ALTER TABLE users ADD COLUMN campus_id VARCHAR(50);')
+          throw new Error('Database schema error: campus_id column is missing. Please add the campus_id column to the users table.')
+        }
+        throw error
+      } else {
+        throw error
+      }
+    }
 
     return result.rows[0] as { id: string; email: string } | null
   } catch (error) {
     console.error('Error creating user:', error)
     return null
-  } finally {
-    client.release()
   }
 }
 

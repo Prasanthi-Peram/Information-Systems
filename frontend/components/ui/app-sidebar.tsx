@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Drill, MonitorCog, School, AirVent, ChevronDown, ChevronRight, Settings } from "lucide-react"
+import { Home, Drill, MonitorCog, School, AirVent, ChevronDown, ChevronRight, Settings, LogOut, User, Shield, UserCheck } from "lucide-react"
 import { useState } from "react"
 
 import {
@@ -19,6 +19,8 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Button } from "@/components/ui/button"
+import { signOutAction } from '@/app/actions/auth'
 
 export function AppSidebar() {
   const [isAPsOpen, setIsAPsOpen] = useState(true)
@@ -53,63 +55,24 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
                   <a href="/maintenance">
                     <Drill className="h-7 w-7" />
-                    <span className="text-base">Maintence</span>
+                    <span className="text-base">Maintenance</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-                  <a href="/dss">
-                    <MonitorCog className="h-7 w-7" />
-                    <span className="text-base">DSS</span>
+                  <a href="/rooms">
+                    <School className="h-7 w-7" />
+                    <span className="text-base">Rooms</span>
                   </a>
                 </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Collapsible open={isAPsOpen} onOpenChange={setIsAPsOpen}>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-                      <School className="h-7 w-7" />
-                      <span className="text-base">Rooms</span>
-                      {isAPsOpen ? (
-                        <ChevronDown className="ml-auto h-7 w-7" />
-                      ) : (
-                        <ChevronRight className="ml-auto h-7 w-7" />
-                      )}
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub className="mt-2 space-y-1">
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30">
-                          <a href="/rooms/nr312" className="text-sm">NR312</a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30">
-                          <a href="/rooms/nc324" className="text-sm">NC324</a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30">
-                          <a href="/rooms/nr422" className="text-sm">NR422</a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/30">
-                          <a href="/rooms/ords-lab" className="text-sm">ORDS Lab</a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </Collapsible>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-4 border-t border-slate-800">
-        <SidebarMenu>
+        <SidebarMenu className="space-y-2">
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
               <a href="/settings">
@@ -117,6 +80,17 @@ export function AppSidebar() {
                 <span className="text-base">Settings</span>
               </a>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <form action={signOutAction} className="w-full">
+              <SidebarMenuButton 
+                type="submit"
+                className="text-red-400 hover:text-red-300 hover:bg-red-900/20 w-full"
+              >
+                <LogOut className="h-7 w-7" />
+                <span className="text-base">Sign Out</span>
+              </SidebarMenuButton>
+            </form>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
