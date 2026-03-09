@@ -1,0 +1,7 @@
+psycopg[binary]
+pandas
+numpy
+scikit-learn
+mlflow
+joblib
+boto3

@@ -8,7 +8,8 @@ def get_db_connection():
     return psycopg.connect(
         host=os.getenv("DB_HOST", "localhost"),
         user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
+        # Prefer DB_PASSWORD (used in docker-compose), fall back to DB_PASS for local runs
+        password=os.getenv("DB_PASSWORD") or os.getenv("DB_PASS", ""),
         dbname=os.getenv("DB_NAME", "postgres")
     )
 
@@ -27,6 +28,20 @@ def get_db_cursor():
     finally:
         cur.close()
         conn.close()
+
+
+def insert_ac_device(device_id: int, location: str):
+    """Insert or upsert a device into ac_device."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO ac_device (device_id, location)
+            VALUES (%s, %s)
+            ON CONFLICT (device_id) DO UPDATE SET location = EXCLUDED.location;
+            """,
+            (device_id, location),
+        )
+
 
 def insert_device_telemetry(data: dict):
     with get_db_cursor() as cur:

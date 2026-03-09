@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import psycopg
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from db import insert_device_telemetry
+from ml_utils import run_prediction
 
 
 # Db migrations
@@ -15,7 +16,7 @@ from db import insert_device_telemetry
 def run_migrations():
     db_host = os.getenv("DB_HOST", "db")
     db_user = os.getenv("DB_USER", "postgres")
-    db_password = os.getenv("DB_PASSWORD", "")
+    db_password = os.getenv("DB_PASS", "")
     db_name = os.getenv("DB_NAME", "postgres")
 
     migrations_path = Path(__file__).parent / "migrations.sql"
@@ -73,7 +74,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
             insert_device_telemetry(data)
-            await websocket.send_json({"status": "success"})
+            prediction=run_prediction(data)
+            await websocket.send_json({"status": "success","prediction":prediction})
 
     except WebSocketDisconnect:
         pass
