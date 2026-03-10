@@ -3,14 +3,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS ac_device (
-    device_id   BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    device_id   TEXT PRIMARY KEY,
     location    TEXT NOT NULL,
     last_service TIMESTAMPTZ  DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS device_telemetry (
     time_stamp        TIMESTAMPTZ NOT NULL,
-    device_id         BIGINT NOT NULL REFERENCES ac_device(device_id) ON DELETE CASCADE,
+    device_id         TEXT NOT NULL REFERENCES ac_device(device_id) ON DELETE CASCADE,
 
     current           DOUBLE PRECISION,
     voltage           DOUBLE PRECISION,
@@ -29,36 +29,32 @@ CREATE TABLE IF NOT EXISTS device_telemetry (
 SELECT create_hypertable('device_telemetry', 'time_stamp', if_not_exists => TRUE);
 
 CREATE TABLE IF NOT EXISTS alerts(
-    alert_id      BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    time_stamp    TIMESTAMPTZ NOT NULL,
-    device_id     BIGINT NOT NULL,
+    alert_id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    time_stamp TIMESTAMPTZ NOT NULL,
+    device_id TEXT NOT NULL,
 
+    alert_text TEXT NOT NULL,
+    is_true_alarm BOOLEAN DEFAULT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
 
-    alert_text    TEXT NOT NULL,
-    is_true_alarm BOOLEAN DEFAULT NULL, 
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    resolved_at   TIMESTAMPTZ,
-     alert_criticality   TEXT CHECK (alert_criticality IN ('Critical', 'Warning', 'Info')),
+    alert_criticality TEXT CHECK (alert_criticality IN ('Critical','Warning','Info')),
     recommendation TEXT,
 
     predicted_service_date TIMESTAMPTZ DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS ml_predictions (
-    prediction_id      BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    time_stamp          TIMESTAMPTZ NOT NULL,
-    device_id           BIGINT NOT NULL,
-    
-    predicted_state     INT,
-    health_score        DOUBLE PRECISION,
-    performance_score   DOUBLE PRECISION,
-   
-    
-    --ground_truth        INT,
-    --is_error            BOOLEAN DEFAULT FALSE,
-    model_version       TEXT
-);
+    prediction_id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    time_stamp TIMESTAMPTZ NOT NULL,
+    device_id TEXT NOT NULL,
 
+    predicted_state INT,
+    health_score DOUBLE PRECISION,
+    performance_score DOUBLE PRECISION,
+
+    model_version TEXT
+);
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255) NOT NULL UNIQUE,

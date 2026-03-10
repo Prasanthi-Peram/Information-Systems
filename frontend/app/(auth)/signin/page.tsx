@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useActionState } from 'react'
 import { useRouter } from 'next/navigation'
-import Button from '@/components/ui/Button'
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormGroup,

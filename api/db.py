@@ -74,4 +74,25 @@ def insert_device_telemetry(data: dict):
             data,
         )
 
+def insert_alert(device_id, text, criticality, service_date):
 
+    with get_db_cursor() as cur:
+
+        cur.execute(
+            """
+            INSERT INTO alerts(
+                time_stamp,
+                device_id,
+                alert_text,
+                alert_criticality,
+                predicted_service_date
+            )
+            VALUES(now(), %s, %s, %s, %s)
+            """,
+            (
+                device_id,
+                text,
+                criticality,
+                service_date
+            )
+        )

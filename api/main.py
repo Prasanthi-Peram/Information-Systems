@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import psycopg
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from db import insert_device_telemetry
+from db import insert_device_telemetry, get_db_cursor
 from ml_utils import run_prediction
 
 
@@ -81,3 +82,78 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
     except Exception as e:
         await websocket.send_json({"status": "error", "message": str(e)})
+
+@app.get("/maintenance")
+def get_maintenance():
+
+    with get_db_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT
+                d.device_id,
+                d.location,
+                d.last_service,
+                COALESCE(a.predicted_service_date,
+                        d.last_service + interval '180 days'
+                        )  AS next_service,
+                a.alert_text,
+                a.alert_criticality
+            FROM ac_device d
+            LEFT JOIN LATERAL (
+                SELECT alert_text, alert_criticality
+                FROM alerts 
+                WHERE device_id = d.device_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) a ON TRUE
+            ON d.device_id = a.device_id
+            """
+        )
+
+        rows = cur.fetchall()
+
+    result = []
+
+    for r in rows:
+
+        result.append({
+            "device_id": f"AC-{r[0]:03d}",
+            "room": r[1],
+            "last_service": r[2],
+            "next_service": r[3],
+            "issue": r[4] or "None",
+            "criticality": r[5] or "Low"
+        })
+
+    return result
+
+@app.get("/alerts")
+def get_alerts():
+
+    with get_db_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT
+                device_id,
+                alert_text,
+                alert_criticality,
+                created_at
+            FROM alerts
+            ORDER BY created_at DESC
+            LIMIT 10
+            """
+        )
+
+        rows = cur.fetchall()
+
+    return [
+        {
+            "device": f"AC-{r[0]:03d}",
+            "alert": r[1],
+            "criticality": r[2],
+            "time": r[3]
+        }
+        for r in rows
+    ]

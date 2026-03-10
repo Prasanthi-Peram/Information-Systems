@@ -1,3 +1,4 @@
+from marshal import version
 import os
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import pandas as pd
 import psycopg
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
+from datetime import datetime
+
 
 # ============================================================
 # CONFIGURATION
@@ -42,29 +45,71 @@ def load_data() -> pd.DataFrame:
 # DATA INGESTION & FEATURE ENGINEERING
 # ============================================================
 
-def engineer_features(df: pd.DataFrame):
-    """Calculates metrics based on your provided schema columns"""
+def engineer_features(df):
+
+    df = df.copy()
+
     df["time_stamp"] = pd.to_datetime(df["time_stamp"])
-    
-    # Feature Engineering Logic
+
+    df = df.sort_values(["device_id", "time_stamp"]).reset_index(drop=True)
+
+    # Electrical features
     df["apparent_power"] = df["voltage"] * df["current"]
-    df["load_ratio"] = df["real_power"] / df["apparent_power"].replace(0, np.nan)
-    df["thermal_diff"] = df["external_temp"] - df["room_temp"]
-    
-    # Rolling averages for stability analysis
-    df["power_smooth"] = df.groupby("device_id")["real_power"].transform(lambda x: x.rolling(5, 1).mean())
-    
-    # Time cycles
+
+    df["load_ratio"] = df["real_power"] / df["apparent_power"].replace(0, 1)
+
+    # Thermal features
+    df["thermal_stress"] = df["external_temp"] - df["room_temp"]
+
+    df["env_load_index"] = df["external_temp"] * df["humidity"]
+
+    # Time features
     df["hour"] = df["time_stamp"].dt.hour
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-    
-    return df.fillna(0)
+
+    df["hour_sin"] = np.sin(2*np.pi*df["hour"]/24)
+    df["hour_cos"] = np.cos(2*np.pi*df["hour"]/24)
+
+    # Rolling features
+    df["rolling_std_power"] = (
+        df.groupby("device_id")["real_power"]
+        .rolling(3, min_periods=1)
+        .std()
+        .reset_index(0, drop=True)
+    )
+
+    df["rolling_mean_power"] = (
+        df.groupby("device_id")["real_power"]
+        .rolling(3, min_periods=1)
+        .mean()
+        .reset_index(0, drop=True)
+    )
+
+    df["power_variability"] = (
+        df["rolling_std_power"] /
+        df["rolling_mean_power"].replace(0, 1)
+    )
+
+    # Electrical stability
+    df["current_diff"] = (
+        df.groupby("device_id")["current"]
+        .diff()
+        .fillna(0)
+    )
+
+    df["electrical_instability"] = (
+        df.groupby("device_id")["current"]
+        .rolling(3, min_periods=1)
+        .std()
+        .reset_index(0, drop=True)
+    )
+
+    return df
+
 
 def create_targets(df: pd.DataFrame):
     """Generates ground truth for performance and health scores"""
     # Performance score based on temp diff vs power
-    df["perf_target"] = (df["thermal_diff"] / df["real_power"].replace(0, 1)).rank(pct=True) * 100
+    df["perf_target"] = (df["thermal_stress"] / df["real_power"].replace(0, 1)).rank(pct=True) * 100
     
     # Health score (inverse of power factor deviation)
     df["health_target"] = df["power_factor"] * 100
@@ -90,8 +135,23 @@ def main():
     df = create_targets(engineer_features(raw_df))
     
     features = [
-        "current", "voltage", "power_factor", "real_power", "load_ratio",
-        "room_temp", "external_temp", "humidity", "thermal_diff", "hour_sin", "hour_cos"
+        "current",
+        "voltage",
+        "power_factor",
+        "real_power",
+        "load_ratio",
+        "room_temp",
+        "external_temp",
+        "humidity",
+        "thermal_stress",
+        "env_load_index",
+        "hour_sin",
+        "hour_cos",
+        "rolling_std_power",
+        "rolling_mean_power",
+        "power_variability",
+        "current_diff",
+        "electrical_instability"
     ]
     
     X = df[features]
@@ -109,13 +169,14 @@ def main():
     # 3. Log to MLflow (Syncs to S3)
     model_dir = Path("/app/models")
     model_dir.mkdir(exist_ok=True)
+    
+    version = f"v_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
     with mlflow.start_run(run_name="AC_Standard_Training"):
         # Save Scaler
         joblib.dump(scaler, model_dir / "scaler.joblib")
         
         # Log Models and Version
-        version = "v1.0.0"
         mlflow.log_param("model_version", version)
         
         # Log as artifacts (pushed to S3)
