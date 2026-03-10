@@ -73,5 +73,28 @@ def insert_device_telemetry(data: dict):
             """,
             data,
         )
-
+        
+def insert_prediction(prediction: dict):
+    """Inserts ML results into ml_predictions table."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO ml_predictions (
+                time_stamp, 
+                device_id, 
+                predicted_state, 
+                health_score, 
+                performance_score, 
+                model_version
+            ) VALUES (
+                %(time_stamp)s, 
+                %(device_id)s, 
+                %(predicted_state)s, 
+                %(health_score)s, 
+                %(performance_score)s, 
+                %(model_version)s
+            );
+            """,
+            prediction,
+        )
 

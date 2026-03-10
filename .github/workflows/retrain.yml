@@ -34,4 +34,4 @@ jobs:
           pip install -r ml/requirements.txt
 
       - name: Run Training Pipeline
-        run: python ml/scripts/train_pipeline.py
+        run: python ml/scripts/train.py

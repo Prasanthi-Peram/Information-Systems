@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS alerts(
 CREATE TABLE IF NOT EXISTS ml_predictions (
     prediction_id      BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     time_stamp          TIMESTAMPTZ NOT NULL,
-    device_id           BIGINT NOT NULL,
+    device_id           TEXT NOT NULL,
     
     predicted_state     INT,
     health_score        DOUBLE PRECISION,
