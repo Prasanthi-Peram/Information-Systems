@@ -213,6 +213,45 @@ def insert_live_prediction(prediction: dict):
 
 def insert_alert(device_id, time_stamp, alert):
     with get_db_cursor() as cur:
+        # Check if an identical alert already exists for this EXACT timestamp
+        # This prevents processing the same data point twice while allowing 
+        # logging of persistent issues across different telemetry points.
+        cur.execute(
+            """
+            SELECT 1 FROM alerts 
+            WHERE device_id = %s 
+              AND alert_text = %s 
+              AND time_stamp = %s
+            LIMIT 1
+            """,
+            (device_id, alert["text"], time_stamp)
+        )
+        if cur.fetchone():
+            return  # Skip insertion if this exact alert already exists for this timestamp
+
+        # Calculate predicted_service_date based on criticality
+        # Critical: 3 days, Warning: 7 days, others: 14 days
+        days_to_add = 14
+        if alert["criticality"] == "Critical":
+            days_to_add = 3
+        elif alert["criticality"] == "Warning":
+            days_to_add = 7
+
+        from datetime import datetime, timedelta
+        
+        # Ensure time_stamp is a datetime object
+        if isinstance(time_stamp, str):
+            # Handle ISO format with Z or offset
+            try:
+                ts_obj = datetime.fromisoformat(time_stamp.replace('Z', '+00:00'))
+            except ValueError:
+                # Fallback for other formats if necessary
+                ts_obj = datetime.now()
+        else:
+            ts_obj = time_stamp
+
+        predicted_date = ts_obj + timedelta(days=days_to_add)
+
         cur.execute(
             """
             INSERT INTO alerts(
@@ -220,18 +259,52 @@ def insert_alert(device_id, time_stamp, alert):
                 time_stamp,
                 alert_text,
                 alert_criticality,
-                recommendation
+                recommendation,
+                predicted_service_date
             )
-            VALUES (%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s, %s)
             """,
             (
                 device_id,
                 time_stamp,
                 alert["text"],
                 alert["criticality"],
-                alert["recommendation"]
+                alert["recommendation"],
+                predicted_date
             )
         )
+
+
+def get_false_alert_count(interval: str = "1 hour") -> int:
+    """
+    Count alerts that have been marked as false (is_true_alarm = FALSE)
+    within the given time window (e.g. '1 hour', '24 hours').
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM alerts
+            WHERE is_true_alarm = FALSE
+              AND created_at > NOW() - %s::interval;
+            """,
+            (interval,),
+        )
+        row = cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+def get_total_false_alert_count() -> int:
+    """Count all alerts that have been marked as false."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM alerts
+            WHERE is_true_alarm = FALSE;
+            """
+        )
+        row = cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
 
 def get_alerts(limit: int = 20):
     """Fetch the most recent true alerts."""
@@ -240,7 +313,7 @@ def get_alerts(limit: int = 20):
             """
             SELECT alert_id, time_stamp, device_id, alert_text, alert_criticality, recommendation, created_at
             FROM alerts
-            WHERE is_true_alarm = TRUE AND resolved_at IS NULL
+            WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%'
             ORDER BY time_stamp DESC
             LIMIT %s;
             """,
@@ -274,28 +347,22 @@ def resolve_alert(alert_id: int):
         )
 
 def get_maintenance_tasks():
-    """Fetch maintenance tasks by joining devices with their latest true alerts."""
     with get_db_cursor() as cur:
         cur.execute(
             """
             SELECT 
-                a.alert_id as id,
-                a.device_id as "deviceId",
-                l.location_name as room,
-                TO_CHAR(d.last_service, 'YYYY-MM-DD') as "lastService",
-                TO_CHAR(d.last_service + interval '6 months', 'YYYY-MM-DD') as "nextService",
-                a.alert_text as issue,
-                CASE 
-                    WHEN a.alert_criticality = 'Critical' THEN 'High'
-                    WHEN a.alert_criticality = 'Warning' THEN 'Medium'
-                    ELSE 'Low'
-                END as criticality,
-                a.time_stamp
+                alert_id as id,
+                device_id as "deviceId",
+                (SELECT location_name FROM live_location l JOIN live_ac_device d ON l.location_id = d.location_id WHERE d.device_id = a.device_id) as room,
+                (SELECT TO_CHAR(last_service, 'YYYY-MM-DD') FROM live_ac_device d WHERE d.device_id = a.device_id) as "lastService",
+                TO_CHAR(predicted_service_date, 'YYYY-MM-DD') as "nextService",
+                alert_text as issue,
+                alert_criticality as criticality,
+                time_stamp as "timeStamp"
             FROM alerts a
-            LEFT JOIN live_ac_device d ON a.device_id = d.device_id
-            LEFT JOIN live_location l ON d.location_id = l.location_id
-            WHERE a.is_true_alarm = TRUE AND a.resolved_at IS NULL
-            ORDER BY a.time_stamp DESC;
+            WHERE resolved_at IS NULL
+              AND alert_text LIKE 'Telemetry anomaly%%'
+            ORDER BY time_stamp DESC
             """,
         )
         columns = [desc[0] for desc in cur.description]
@@ -321,7 +388,7 @@ def get_dashboard_stats():
                 (SELECT AVG(performance_score) FROM latest_predictions WHERE predicted_state = 1) as avg_performance,
                 (SELECT AVG(health_score) FROM latest_predictions WHERE predicted_state = 1) as avg_health,
                 (SELECT AVG(real_power) FROM latest_telemetry t JOIN latest_predictions p ON t.device_id = p.device_id WHERE p.predicted_state = 1) as avg_power,
-                (SELECT COUNT(*) FROM alerts WHERE is_true_alarm = TRUE AND resolved_at IS NULL) as maintenance_tasks;
+                (SELECT COUNT(*) FROM alerts WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%') as maintenance_tasks;
             """
         )
 
@@ -821,7 +888,9 @@ def get_device_details(device_id: str):
 def get_device_history(device_id: str = None, time_range: str = "24h"):
     """Fetch historical telemetry for a device or entire system aggregated by time intervals."""
     interval = "1 hour"
-    if time_range == "7d":
+    if time_range == "1h":
+        interval = "5 minutes"
+    elif time_range == "7d":
         interval = "6 hours"
     elif time_range == "30d":
         interval = "1 day"
@@ -830,7 +899,9 @@ def get_device_history(device_id: str = None, time_range: str = "24h"):
 
     # Map time_range to postgres interval
     pg_range = "1 day"
-    if time_range == "7d":
+    if time_range == "1h":
+        pg_range = "1 hour"
+    elif time_range == "7d":
         pg_range = "7 days"
     elif time_range == "30d":
         pg_range = "30 days"

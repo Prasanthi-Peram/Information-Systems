@@ -9,10 +9,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db import (
-    insert_device_telemetry, get_dashboard_stats, get_rooms_status,
-    get_room_details, get_alerts, get_maintenance_tasks, get_device_details,
-    resolve_alert_by_device, resolve_alert, create_room, create_ac_device,
-    get_device_history, get_user_by_email, insert_user
+    insert_device_telemetry,
+    get_dashboard_stats,
+    get_rooms_status,
+    get_room_details,
+    get_alerts,
+    get_maintenance_tasks,
+    get_device_details,
+    resolve_alert_by_device,
+    resolve_alert,
+    create_room,
+    create_ac_device,
+    get_device_history,
+    get_user_by_email,
+    insert_user,
+    get_false_alert_count,
+    get_total_false_alert_count
 )
 from ml_utils import load_all_models, run_prediction
 
@@ -57,6 +69,11 @@ class UserCreate(BaseModel):
     role: str
     campus_id: str | None = None
     created_at: str
+
+
+class FalseAlertFeedback(BaseModel):
+    # For now we don't need device_id to count; reserved for future
+    device_id: str | None = None
 
 app = FastAPI(lifespan=lifespan)
 
@@ -170,7 +187,21 @@ async def resolve_maintenance(device_id: str):
 async def resolve_alert_endpoint(alert_id: int):
     try:
         resolve_alert(alert_id)
-        return {"status": "success", "message": f"Alert {alert_id} resolved"}
+        
+        # Check for retraining after resolving an alert (which marks it as false)
+        total_false_count = get_total_false_alert_count()
+        should_retrain = total_false_count > 0 and (total_false_count % 10 == 0)
+        
+        if should_retrain:
+            print(f"Total false alerts reached {total_false_count}. Triggering retraining...", flush=True)
+            asyncio.create_task(_run_training_background(app))
+
+        return {
+            "status": "success", 
+            "message": f"Alert {alert_id} resolved",
+            "retrain_triggered": should_retrain,
+            "total_false_alerts": total_false_count
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -200,23 +231,66 @@ async def api_create_user(payload: UserCreate):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+async def _run_training_background(app: FastAPI):
+    """
+    Helper to start the training script in the background (non-blocking).
+    After training, it reloads the models into app.state.models.
+    """
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        try:
+            print("Retrain: starting training script...", flush=True)
+            subprocess.run(
+                ["python", "/app/retrain_model.py"],
+                check=True,
+            )
+            print("Retrain: training script completed.", flush=True)
+            return True
+        except Exception as e:
+            print(f"Retrain failed: {e}", flush=True)
+            return False
+
+    success = await loop.run_in_executor(None, _run)
+    
+    if success:
+        print("Retrain: Reloading models...", flush=True)
+        try:
+            new_models = await loop.run_in_executor(None, load_all_models)
+            app.state.models = new_models
+            print(f"Retrain: Models reloaded. New version: {app.state.models['version']}", flush=True)
+        except Exception as e:
+            print(f"Retrain: Failed to reload models: {e}", flush=True)
+
+
 @app.post("/maintenance/retrain")
 async def trigger_retrain():
     """
     Trigger model retraining asynchronously from the API.
-    Intended to be called when the user confirms deleting a maintenance task.
+    Can be called directly if you want to force retraining.
     """
-
-    async def run_training():
-        loop = asyncio.get_event_loop()
-        # Run the training script in a background thread so we don't block the API
-        def _run():
-            try:
-                subprocess.run(["python", "/app/training/train.py"], check=True)
-            except Exception as e:
-                print(f"Retrain failed: {e}", flush=True)
-
-        await loop.run_in_executor(None, _run)
-
-    asyncio.create_task(run_training())
+    asyncio.create_task(_run_training_background(app))
     return {"status": "started", "message": "Retraining triggered"}
+
+
+@app.post("/maintenance/false-feedback")
+async def false_alert_feedback(payload: FalseAlertFeedback):
+    """
+    Called when the user marks a maintenance task as unnecessary (false alert).
+    We count total false alerts, and if that count
+    reaches a new multiple of 10, we kick off retraining (non-blocking).
+    """
+    # Count how many alerts have been marked as false in total
+    total_false_count = get_total_false_alert_count()
+
+    # We only retrain when false alerts reach a multiple of 10
+    should_retrain = total_false_count > 0 and (total_false_count % 10 == 0)
+
+    if should_retrain:
+        print(f"Total false alerts reached {total_false_count}. Triggering retraining...", flush=True)
+        asyncio.create_task(_run_training_background(app))
+
+    return {
+        "total_false_alerts": total_false_count,
+        "retrain_started": should_retrain,
+    }

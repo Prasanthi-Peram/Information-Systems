@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -27,6 +28,7 @@ interface MaintenanceRecord {
   criticality: 'Low' | 'Medium' | 'High'
   scheduled?: boolean
   technician?: string
+  timeStamp?: string
 }
 
 interface Technician {
@@ -115,7 +117,7 @@ const initialItems: MaintenanceRecord[] = [
 
 export default function MaintenancePage() {
   const router = useRouter()
-  const [items, setItems] = useState<MaintenanceRecord[]>(initialItems)
+  const [items, setItems] = useState<MaintenanceRecord[]>([])
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set())
   const [assignedItems, setAssignedItems] = useState<MaintenanceRecord[]>([])
@@ -128,21 +130,47 @@ export default function MaintenancePage() {
   const [newTechnician, setNewTechnician] = useState({ name: '', specialization: '', phone: '', email: '' })
   const [adminPassword, setAdminPassword] = useState('')
 
+  const fetchMaintenanceTasks = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/maintenance/tasks')
+      const data = await response.json()
+
+      const savedItems = localStorage.getItem('assignedMaintenanceItems')
+      if (savedItems) {
+        const parsedAssignedItems = JSON.parse(savedItems)
+        setAssignedItems(parsedAssignedItems)
+
+        const assignedIds = parsedAssignedItems.map((item: any) => item.id)
+        const filteredItems = data.filter((item: any) => !assignedIds.includes(item.id))
+        setItems(filteredItems)
+      } else {
+        setItems(data)
+      }
+    } catch (error) {
+      console.error('Error fetching maintenance tasks:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchMaintenanceTasks()
+    const interval = setInterval(fetchMaintenanceTasks, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   const handleExportPageReport = () => {
     const dateStr = new Date().toISOString().split('T')[0]
 
     const pendingLines = items.length
       ? items.map((item) =>
-          `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}]`
-        )
+        `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}]`
+      )
       : ['No pending maintenance items.']
 
     const assignedLines = assignedItems.length
       ? assignedItems.map((item) =>
-          `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${
-            item.technician || 'Not Assigned'
-          }`
-        )
+        `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${item.technician || 'Not Assigned'
+        }`
+      )
       : ['No assigned maintenance items.']
 
     downloadPdfReport(
@@ -182,22 +210,22 @@ export default function MaintenancePage() {
         setAssignedItems(JSON.parse(savedItems))
       }
     }
-    
+
     // Load initial items
     loadAssignedItems()
-    
+
     // Listen for storage changes
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'assignedMaintenanceItems') {
         loadAssignedItems()
       }
     }
-    
+
     window.addEventListener('storage', handleStorageChange)
-    
+
     // Also check for changes periodically (for same-tab updates)
     const interval = setInterval(loadAssignedItems, 1000)
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       clearInterval(interval)
@@ -206,19 +234,19 @@ export default function MaintenancePage() {
 
   const handleCheckboxChange = (itemId: string, checked: boolean) => {
     const newSelectedItems = new Set(selectedItems)
-    
+
     if (checked) {
       newSelectedItems.add(itemId)
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: true } : item
       ))
     } else {
       newSelectedItems.delete(itemId)
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: false } : item
       ))
     }
-    
+
     setSelectedItems(newSelectedItems)
   }
 
@@ -230,23 +258,23 @@ export default function MaintenancePage() {
     if (showTechnicianDialog && selectedTechnician) {
       const technician = techniciansList.find(t => t.id === selectedTechnician)
       const itemToAssign = items.find(item => item.id === showTechnicianDialog)
-      
+
       if (itemToAssign && technician) {
         const updatedItem = { ...itemToAssign, technician: technician.name }
-        
+
         const newAssignedItems = [...assignedItems, updatedItem]
         setAssignedItems(newAssignedItems)
         localStorage.setItem('assignedMaintenanceItems', JSON.stringify(newAssignedItems))
-        
+
         setItems(prev => prev.filter(item => item.id !== showTechnicianDialog))
-        
+
         setSelectedItems(prev => {
           const newSet = new Set(prev)
           newSet.delete(showTechnicianDialog)
           return newSet
         })
       }
-      
+
       setShowTechnicianDialog(null)
       setSelectedTechnician('')
     }
@@ -258,17 +286,17 @@ export default function MaintenancePage() {
 
   const confirmCancel = (itemId: string) => {
     const itemToUnassign = assignedItems.find(item => item.id === itemId)
-    
+
     if (itemToUnassign) {
       const updatedItem = { ...itemToUnassign, technician: undefined, scheduled: false }
-      
+
       const newAssignedItems = assignedItems.filter(item => item.id !== itemId)
       setAssignedItems(newAssignedItems)
       localStorage.setItem('assignedMaintenanceItems', JSON.stringify(newAssignedItems))
-      
+
       const restoredItem = { ...updatedItem, id: itemId }
       setItems(prev => [...prev, restoredItem])
-      
+
       setSelectedItems(prev => {
         const newSet = new Set(prev)
         newSet.delete(itemId)
@@ -278,15 +306,14 @@ export default function MaintenancePage() {
     setShowCancelDialog(null)
   }
 
-  
+
   const handleExportAllReport = () => {
     if (assignedItems.length === 0) return
-    
+
     const dateStr = new Date().toISOString().split('T')[0]
 
     const lines = assignedItems.map((item) =>
-      `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${
-        item.technician || 'Not Assigned'
+      `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${item.technician || 'Not Assigned'
       }`
     )
 
@@ -330,8 +357,8 @@ export default function MaintenancePage() {
             <p className="text-muted-foreground">Manage and track AC unit maintenance schedules</p>
           </div>
           <div className="flex flex-col gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => router.push('/dashboard')}
               className="flex items-center gap-2 bg-white text-black hover:bg-gray-100 border-0"
@@ -341,47 +368,72 @@ export default function MaintenancePage() {
             </Button>
           </div>
         </div>
-        
 
-        
+
+
         <div className="rounded-lg border bg-card p-6">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-green-600" />
             Assigned Maintenance
           </h2>
-          {assignedItems.length > 0 ? (
-            <div className="space-y-2">
-              {assignedItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-950/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <div>
-                      <div className="font-medium">{item.deviceId}</div>
-                      <div className="text-sm text-muted-foreground">{item.room}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
-                      {item.technician}
-                    </Badge>
-                    <button
-                      onClick={() => handleExportReport(item)}
-                      className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
-                    >
-                      <FileDown className="h-3 w-3 mr-1" />
-                      Export
-                    </button>
-                    <button
-                      onClick={() => handleUnassignTechnician(item.id)}
-                      className="ml-2 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+          <div className="mb-4 overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>AC Unit</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead>Criticality</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {assignedItems.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                    </TableCell>
+                    <TableCell className="font-medium">{item.deviceId}</TableCell>
+                    <TableCell>{item.room}</TableCell>
+                    <TableCell>{item.issue}</TableCell>
+                    <TableCell>
+                      <Badge className={cn(
+                        item.criticality === 'High' ? 'bg-red-100 text-red-700' :
+                          item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                      )}>
+                        {item.criticality}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{item.technician}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleExportReport(item)}
+                        >
+                          <FileDown className="h-3 w-3 mr-1" />
+                          Export
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleUnassignTechnician(item.id)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {assignedItems.length === 0 && (
             <div className="text-center py-8">
               <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500 text-lg">No assigned maintenance technicians yet.</p>
@@ -389,8 +441,65 @@ export default function MaintenancePage() {
             </div>
           )}
         </div>
+        <div className="rounded-lg border bg-card p-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-blue-600" />
+            Pending Maintenance
+          </h2>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>AC Unit</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead>Criticality</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                    </TableCell>
+                    <TableCell className="font-medium">{item.deviceId}</TableCell>
+                    <TableCell>{item.room}</TableCell>
+                    <TableCell>{item.issue}</TableCell>
+                    <TableCell>
+                      <Badge className={cn(
+                        item.criticality === 'High' ? 'bg-red-100 text-red-700' :
+                          item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                      )}>
+                        {item.criticality}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        onClick={() => handleScheduleClick(item.id)}
+                      >
+                        <Users className="h-3 w-3 mr-1" />
+                        Assign
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {items.length === 0 && (
+            <div className="text-center py-8">
+              <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg">No pending maintenance tasks.</p>
+            </div>
+          )}
+        </div>
+
       </div>
-      
+
       {showCancelDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full">
@@ -413,7 +522,7 @@ export default function MaintenancePage() {
           </div>
         </div>
       )}
-      
+
       {showTechnicianDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full">
@@ -446,9 +555,8 @@ export default function MaintenancePage() {
                     <div className="font-medium">{technician.name}</div>
                     <div className="text-sm text-muted-foreground">{technician.specialization}</div>
                   </div>
-                  <div className={`ml-auto px-2 py-1 rounded-full text-xs ${
-                    technician.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                  <div className={`ml-auto px-2 py-1 rounded-full text-xs ${technician.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
                     {technician.available ? 'Available' : 'Unavailable'}
                   </div>
                 </div>

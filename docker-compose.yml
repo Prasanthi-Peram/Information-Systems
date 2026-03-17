@@ -15,7 +15,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,11 +33,7 @@ services:
     networks:
       - app-net
     command: >
-      mlflow server 
-      --backend-store-uri postgresql+psycopg2://postgres:${DB_PASS}@db:5432/${DB_NAME}
-      --default-artifact-root s3://${S3_BUCKET_NAME} 
-      --host 0.0.0.0
-      --allowed-hosts "*"
+      mlflow server  --backend-store-uri postgresql+psycopg2://postgres:${DB_PASS}@db:5432/${DB_NAME} --default-artifact-root s3://${S3_BUCKET_NAME}  --host 0.0.0.0 --allowed-hosts "*"
     depends_on:
       db:
         condition: service_healthy
@@ -60,7 +56,7 @@ services:
       db:
         condition: service_healthy
       mlflow:
-       condition: service_started
+        condition: service_started
       ml:
         condition: service_healthy
       data_loader:
@@ -89,23 +85,18 @@ services:
       db:
         condition: service_healthy
       mlflow:
-       condition: service_started
+        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://mlflow:5000/api/2.0/mlflow/registered-models/get?name=AC_Health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://mlflow:5000/api/2.0/mlflow/registered-models/get?name=AC_Health || exit 1" ]
       interval: 10m
       timeout: 10s
       retries: 3
       start_period: 3600s
     networks:
       - app-net
-    command:  >
-      bash -c "
-      until curl -s http://mlflow:5000 >/dev/null; do sleep 2; done &&
-      python training/train.py &&
-      echo 'Training complete. Keeping container alive for Healthcheck...' &&
-      tail -f /dev/null
-      "
-  
+    command: >
+      bash -c " until curl -s http://mlflow:5000 >/dev/null; do sleep 2; done && python training/train.py && echo 'Training complete. Keeping container alive for Healthcheck...' && tail -f /dev/null "
+
   data_loader:
     build: ./api
     environment:
@@ -129,6 +120,7 @@ services:
 
 volumes:
   postgres_data:
+
 
 networks:
   app-net:

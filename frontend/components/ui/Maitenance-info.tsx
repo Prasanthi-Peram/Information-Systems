@@ -294,13 +294,22 @@ const TableSelectableRowDemo = () => {
       })
 
       // When user confirms deletion of a maintenance task,
-      // trigger backend retraining (non-blocking for UI)
+      // send false-alarm feedback to backend. Backend will
+      // trigger retraining non-blockingly when false alerts
+      // in the last hour hit a multiple of 10.
       try {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/maintenance/retrain`, {
-          method: 'POST'
-        })
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/maintenance/false-feedback`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ device_id: null }),
+          }
+        )
       } catch (e) {
-        console.error('Failed to trigger retraining', e)
+        console.error('Failed to send false-alert feedback', e)
       }
 
       setShowDeleteDialog(null)

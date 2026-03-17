@@ -34,7 +34,7 @@ export function DeviceReport({ room, deviceID }: { room: string; deviceID: strin
   const [deviceData, setDeviceData] = useState<DeviceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [historyData, setHistoryData] = useState<any[]>([])
-  const [timeRange, setTimeRange] = useState("24h")
+  const [timeRange, setTimeRange] = useState("1h")
 
   const roomName = room
     ? decodeURIComponent(room).replace(/-/g, ' ').toUpperCase()

@@ -107,13 +107,11 @@ export function ChartAreaInteractive({
                 <SelectItem value="humidity" className="rounded-lg">
                   Humidity
                 </SelectItem>
-                <SelectItem value="both" className="rounded-lg">
-                  Both (Temp & Humidity)
-                </SelectItem>
+
               </SelectContent>
             </Select>
           )}
-          <Select value={timeRange} onValueChange={onTimeRangeChange} defaultValue="24h">
+          <Select value={timeRange} onValueChange={onTimeRangeChange} defaultValue="1h">
             <SelectTrigger
               className="hidden w-[160px] rounded-lg sm:flex"
               aria-label="Select time range"
@@ -121,6 +119,9 @@ export function ChartAreaInteractive({
               <SelectValue placeholder="Select range" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
+              <SelectItem value="1h" className="rounded-lg">
+                1 Hour
+              </SelectItem>
               <SelectItem value="24h" className="rounded-lg">
                 24 Hours
               </SelectItem>
@@ -192,7 +193,7 @@ export function ChartAreaInteractive({
               tickFormatter={(value) => {
                 const date = new Date(value)
                 if (isNaN(date.getTime())) return ""
-                if (timeRange === "24h") {
+                if (timeRange === "24h" || timeRange === "1h") {
                   return date.toLocaleTimeString("en-US", {
                     hour: "numeric",
                     minute: "2-digit",
@@ -222,31 +223,12 @@ export function ChartAreaInteractive({
                 />
               }
             />
-            {parameter === "both" ? (
-              <>
-                <Area
-                  dataKey="temperature"
-                  type="natural"
-                  fill="url(#fillTemperature)"
-                  stroke="var(--color-temperature)"
-                  stackId="a"
-                />
-                <Area
-                  dataKey="humidity"
-                  type="natural"
-                  fill="url(#fillHumidity)"
-                  stroke="var(--color-humidity)"
-                  stackId="b"
-                />
-              </>
-            ) : (
-              <Area
-                dataKey={parameter}
-                type="natural"
-                fill="url(#fillSelected)"
-                stroke="hsl(217.2 91.2% 59.8%)"
-              />
-            )}
+            <Area
+              dataKey={parameter}
+              type="natural"
+              fill="url(#fillSelected)"
+              stroke="hsl(217.2 91.2% 59.8%)"
+            />
             <ChartLegend content={<ChartLegendContent />} />
           </AreaChart>
         </ChartContainer>

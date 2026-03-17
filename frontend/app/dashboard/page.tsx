@@ -18,6 +18,7 @@ interface MaintenanceRecord {
   criticality: 'Low' | 'Medium' | 'High'
   scheduled?: boolean
   technician?: string
+  timeStamp?: string
 }
 
 interface Technician {
@@ -125,7 +126,7 @@ export default function DashboardPage() {
   })
   const [alerts, setAlerts] = useState<any[]>([])
   const [historyData, setHistoryData] = useState<any[]>([])
-  const [timeRange, setTimeRange] = useState("24h")
+  const [timeRange, setTimeRange] = useState("1h")
 
   const fetchStats = async () => {
     try {
@@ -400,6 +401,7 @@ export default function DashboardPage() {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="text-left p-4 font-semibold">AC Unit</th>
+                          <th className="text-left p-4 font-semibold whitespace-nowrap">Time</th>
                           <th className="text-left p-4 font-semibold whitespace-nowrap">Room</th>
                           <th className="text-left p-4 font-semibold hidden md:table-cell whitespace-nowrap">Last Service</th>
                           <th className="text-left p-4 font-semibold hidden lg:table-cell whitespace-nowrap">Next Service</th>
@@ -427,6 +429,9 @@ export default function DashboardPage() {
                                 />
                                 <span className="font-medium whitespace-nowrap">{item.deviceId}</span>
                               </div>
+                            </td>
+                            <td className="p-4 whitespace-nowrap text-xs text-muted-foreground">
+                              {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}
                             </td>
                             <td className="p-4 whitespace-nowrap">{item.room}</td>
                             <td className="p-4 hidden md:table-cell whitespace-nowrap">{item.lastService}</td>
