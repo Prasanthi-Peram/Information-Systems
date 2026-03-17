@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useActionState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { Button } from '@/components/ui/Button'
 import {
   Form,
@@ -23,7 +23,7 @@ const initialState: ActionResponse = {
   errors: undefined,
 }
 
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const roleParam = searchParams.get('role') as 'administrator' | 'technician' | null
@@ -37,34 +37,34 @@ export default function SignInPage() {
     }
   }, [roleParam])
 
-   // Use useActionState hook for the form submission action
-   const [state, formAction, isPending] = useActionState<
-   ActionResponse,
-   FormData
- >(async (prevState: ActionResponse, formData: FormData) => {
-   try {
-     const result = await signIn(formData)
+  // Use useActionState hook for the form submission action
+  const [state, formAction, isPending] = useActionState<
+    ActionResponse,
+    FormData
+  >(async (prevState: ActionResponse, formData: FormData) => {
+    try {
+      const result = await signIn(formData)
 
-     // Handle successful submission
-     if (result.success) {
-       toast.success('Signed in successfully')
-       // Use smooth client-side navigation instead of full page reload
-       setTimeout(() => {
-         router.push('/dashboard')
-       }, 500)
-       return result
-     }
+      // Handle successful submission
+      if (result.success) {
+        toast.success('Signed in successfully')
+        // Use smooth client-side navigation instead of full page reload
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 500)
+        return result
+      }
 
-     return result
-   } catch (err) {
-     console.error('Sign in form error:', err)
-     return {
-       success: false,
-       message: (err as Error).message || 'An error occurred',
-       errors: undefined,
-     }
-   }
- }, initialState)
+      return result
+    } catch (err) {
+      console.error('Sign in form error:', err)
+      return {
+        success: false,
+        message: (err as Error).message || 'An error occurred',
+        errors: undefined,
+      }
+    }
+  }, initialState)
 
   if (!role) {
     return null // Will redirect to select-role
@@ -174,11 +174,11 @@ export default function SignInPage() {
               </Button>
             </div>
           </Form>
-          
+
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400 font-mono">
               Don&apos;t have an account?{' '}
-              <Link 
+              <Link
                 href={`/signup?role=${role}`}
                 className="font-mono font-medium text-blue-700 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
               >
@@ -189,5 +189,13 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignInForm />
+    </Suspense>
   )
 }

@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
-import {getUserByEmail,verifyPassword, createSession,createUser,deleteSession} from '@/lib/auth'
+import { getUserByEmail, verifyPassword, createSession, createUser, deleteSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 
 // Zod schema for signin validation
@@ -36,7 +36,6 @@ const SignUpSchema = z
       message: 'Please select a role',
     }),
     campusId: z.string().optional(),
-    avatar: z.string().url('Invalid avatar URL').optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
@@ -83,26 +82,10 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
       }
     }
 
-    // Mock authentication for testing without database
-    const mockUsers = {
-      'admin@acmanager.com': {
-        id: '00000000-0000-0000-0000-000000000001',
-        email: 'admin@acmanager.com',
-        password: 'admin',
-        role: 'administrator',
-        campusId: 'CAMPUS001'
-      },
-      'tech@acmanager.com': {
-        id: '00000000-0000-0000-0000-000000000002',
-        email: 'tech@acmanager.com',
-        password: 'tech',
-        role: 'technician',
-        campusId: null
-      }
-    }
-    const mockUser = mockUsers[data.email as keyof typeof mockUsers]
-    
-    if (!mockUser) {
+    // Get user from database
+    const user = await getUserByEmail(data.email)
+
+    if (!user) {
       return {
         success: false,
         message: 'Invalid email or password',
@@ -113,7 +96,8 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
     }
 
     // Verify password
-    if (mockUser.password !== data.password) {
+    const isPasswordValid = await verifyPassword(data.password, user.password)
+    if (!isPasswordValid) {
       return {
         success: false,
         message: 'Invalid email or password',
@@ -124,7 +108,7 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
     }
 
     // Verify role matches
-    if (mockUser.role !== data.role) {
+    if (user.role !== data.role) {
       return {
         success: false,
         message: 'Invalid role for this account',
@@ -133,9 +117,9 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
         },
       }
     }
-    
+
     // Verify campus ID for administrators
-    if (data.role === 'administrator' && data.campusId !== mockUser.campusId) {
+    if (data.role === 'administrator' && data.campusId !== user.campus_id) {
       return {
         success: false,
         message: 'Invalid campus ID',
@@ -145,10 +129,10 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
       }
     }
 
-    // Create mock session
-    const sessionCreated = await createSession(mockUser.id)
+    // Create session
+    const sessionCreated = await createSession(user.id)
     if (!sessionCreated) {
-      console.error('Failed to create session for user:', mockUser.id)
+      console.error('Failed to create session for user:', user.id)
       return {
         success: false,
         message: 'Failed to create session. Please try again.',
@@ -181,7 +165,6 @@ export async function signUp(formData: FormData): Promise<ActionResponse> {
       username: formData.get('username') as string,
       role: formData.get('role') as string,
       campusId: formData.get('campusId') as string | undefined,
-      avatar: formData.get('avatar') as string || null,
     }
 
     // Validate input using Zod
@@ -206,12 +189,11 @@ export async function signUp(formData: FormData): Promise<ActionResponse> {
     }
 
     const user = await createUser(
-      data.email, 
-      data.password, 
-      data.username, 
-      data.role, 
-      data.campusId || null,
-      data.avatar?? null
+      data.email,
+      data.password,
+      data.username,
+      data.role,
+      data.campusId || null
     )
     if (!user) {
       return {
@@ -221,8 +203,7 @@ export async function signUp(formData: FormData): Promise<ActionResponse> {
       }
     }
 
-    // Create session for the newly registered user
-    await createSession(user.id)
+    // No automatic session creation - user must sign in manually
 
     return {
       success: true,

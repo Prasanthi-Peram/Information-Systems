@@ -145,7 +145,7 @@ const TableSelectableRowDemo = () => {
   useEffect(() => {
     const savedTechnicians = localStorage.getItem('maintenanceTechnicians')
     const savedAssignedItems = localStorage.getItem('assignedMaintenanceItems')
-    
+
     if (savedTechnicians) {
       try {
         setTechnicians(JSON.parse(savedTechnicians))
@@ -153,7 +153,7 @@ const TableSelectableRowDemo = () => {
         console.error('Failed to parse saved technicians', e)
       }
     }
-    
+
     if (savedAssignedItems) {
       try {
         setAssignedItems(JSON.parse(savedAssignedItems))
@@ -175,21 +175,21 @@ const TableSelectableRowDemo = () => {
 
   const handleCheckboxChange = (itemId: string, checked: boolean) => {
     const newSelectedItems = new Set(selectedItems)
-    
+
     if (checked) {
       newSelectedItems.add(itemId)
       // Mark as scheduled when checked
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: true } : item
       ))
     } else {
       newSelectedItems.delete(itemId)
       // Unschedule when unchecked
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: false, technician: undefined } : item
       ))
     }
-    
+
     setSelectedItems(newSelectedItems)
     // Remove from marked for deletion if unchecked
     const newMarkedForDeletion = new Set(markedForDeletion)
@@ -217,42 +217,42 @@ const TableSelectableRowDemo = () => {
     if (showTechnicianDialog && selectedTechnician) {
       const technician = technicians.find(t => t.id === selectedTechnician)
       const itemToAssign = items.find(item => item.id === showTechnicianDialog)
-      
+
       if (itemToAssign && technician) {
         // Update item with technician
         const updatedItem = { ...itemToAssign, technician: technician.name }
-        
+
         // Move to assigned items
         const newAssignedItems = [...assignedItems, updatedItem]
         setAssignedItems(newAssignedItems)
-        
+
         // Mark technician as unavailable
-        setTechnicians(prev => prev.map(t => 
+        setTechnicians(prev => prev.map(t =>
           t.id === selectedTechnician ? { ...t, available: false } : t
         ))
-        
+
         // Remove from main items
         setItems(prev => prev.filter(item => item.id !== showTechnicianDialog))
-        
+
         // Remove from selected items
         setSelectedItems(prev => {
           const newSet = new Set(prev)
           newSet.delete(showTechnicianDialog)
           return newSet
         })
-        
+
         // Remove from marked for deletion if it was marked
         setMarkedForDeletion(prev => {
           const newSet = new Set(prev)
           newSet.delete(showTechnicianDialog)
           return newSet
         })
-        
+
         // Show success message and reset
         setAssignmentSuccess(true)
         setSelectedTechnician('')
         setTimeout(() => setAssignmentSuccess(false), 2000)
-        
+
         // Keep dialog open so user can add more technicians if needed
       }
     }
@@ -267,7 +267,7 @@ const TableSelectableRowDemo = () => {
         specialization: newTechnician.specialization,
         available: true
       }
-      
+
       setTechnicians(prev => [...prev, addedTechnician])
       setNewTechnician({ name: '', phone: '', email: '', specialization: '' })
       setShowAddTechnicianDialog(false)
@@ -298,27 +298,27 @@ const TableSelectableRowDemo = () => {
 
   return (
     <div className='w-full'>
-      <div className='overflow-hidden rounded-md border'>
-        <Table>
+      <div className='w-full overflow-x-auto rounded-md border'>
+        <Table className="w-full table-auto">
           <TableHeader>
             <TableRow className='hover:bg-transparent'>
               <TableHead>
                 <Checkbox id={id} aria-label='select-all' />
               </TableHead>
-              <TableHead>DeviceID</TableHead>
-              <TableHead>Room</TableHead>
-              <TableHead>Last Service</TableHead>
-              <TableHead>Next Service</TableHead>
-              <TableHead>Issue/Suggestion</TableHead>
-              <TableHead>Criticality</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Technician</TableHead>
+              <TableHead className="font-semibold">DeviceID</TableHead>
+              <TableHead className="font-semibold whitespace-nowrap">Room</TableHead>
+              <TableHead className="font-semibold hidden md:table-cell whitespace-nowrap">Last Service</TableHead>
+              <TableHead className="font-semibold hidden lg:table-cell whitespace-nowrap">Next Service</TableHead>
+              <TableHead className="font-semibold hidden sm:table-cell w-full whitespace-nowrap">Issue/Suggestion</TableHead>
+              <TableHead className="font-semibold">Criticality</TableHead>
+              <TableHead className="font-semibold">Status</TableHead>
+              <TableHead className="font-semibold hidden xl:table-cell">Technician</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map(item => (
-              <TableRow 
-                key={item.id} 
+              <TableRow
+                key={item.id}
                 className={`
                   ${selectedItems.has(item.id) && !isMarkedForDeletion(item.id) ? 'bg-green-100 dark:bg-green-950/30 border-l-4 border-l-green-500' : ''}
                   ${isMarkedForDeletion(item.id) ? 'bg-red-100 dark:bg-red-950/30 border-l-4 border-l-red-500' : ''}
@@ -328,24 +328,23 @@ const TableSelectableRowDemo = () => {
                 onDoubleClick={() => handleDoubleClick(item.id)}
               >
                 <TableCell>
-                  <Checkbox 
-                    id={`table-checkbox-${item.id}`} 
+                  <Checkbox
+                    id={`table-checkbox-${item.id}`}
                     aria-label={`device-checkbox-${item.id}`}
                     checked={selectedItems.has(item.id)}
                     onCheckedChange={(checked) => handleCheckboxChange(item.id, checked as boolean)}
                   />
                 </TableCell>
                 <TableCell className='font-medium'>{item.deviceId}</TableCell>
-                <TableCell>{item.room}</TableCell>
-                <TableCell>{item.lastService}</TableCell>
-                <TableCell>{item.nextService}</TableCell>
-                <TableCell>{item.issue}</TableCell>
+                <TableCell className="whitespace-nowrap">{item.room}</TableCell>
+                <TableCell className="hidden md:table-cell whitespace-nowrap">{item.lastService}</TableCell>
+                <TableCell className="hidden lg:table-cell whitespace-nowrap">{item.nextService}</TableCell>
+                <TableCell className="hidden sm:table-cell whitespace-nowrap">{item.issue}</TableCell>
                 <TableCell>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    item.criticality === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400' :
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.criticality === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400' :
                     item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400' :
-                    'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                  }`}>
+                      'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                    }`}>
                     {item.criticality}
                   </span>
                 </TableCell>
@@ -355,8 +354,8 @@ const TableSelectableRowDemo = () => {
                       {item.technician}
                     </Badge>
                   ) : item.scheduled ? (
-                    <Badge 
-                      className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400 cursor-pointer hover:bg-green-200" 
+                    <Badge
+                      className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400 cursor-pointer hover:bg-green-200"
                       onClick={() => handleScheduleClick(item.id)}
                     >
                       Scheduled
@@ -365,7 +364,7 @@ const TableSelectableRowDemo = () => {
                     <Badge variant="outline">Pending</Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden xl:table-cell">
                   {item.technician ? (
                     <div className="flex items-center gap-2">
                       <UserCheck className="h-4 w-4 text-green-600" />
@@ -419,14 +418,14 @@ const TableSelectableRowDemo = () => {
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {technicians.map(tech => (
                 <div key={tech.id} className={`flex items-center space-x-2 p-2 border rounded-lg ${tech.available ? 'hover:bg-accent/50 cursor-pointer' : 'opacity-50 bg-muted/50 cursor-not-allowed'}`}>
-                  <Checkbox 
+                  <Checkbox
                     id={`tech-${tech.id}`}
                     checked={selectedTechnician === tech.id}
                     onCheckedChange={() => tech.available && setSelectedTechnician(tech.id)}
                     disabled={!tech.available}
                   />
-                  <label 
-                    htmlFor={`tech-${tech.id}`} 
+                  <label
+                    htmlFor={`tech-${tech.id}`}
                     className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${tech.available ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                   >
                     {tech.name}
@@ -439,8 +438,8 @@ const TableSelectableRowDemo = () => {
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowAddTechnicianDialog(true)}
               className="flex items-center gap-2"
             >
@@ -509,7 +508,7 @@ const TableSelectableRowDemo = () => {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleAddTechnician}
               disabled={!newTechnician.name || !newTechnician.phone || !newTechnician.email || !newTechnician.specialization}
             >

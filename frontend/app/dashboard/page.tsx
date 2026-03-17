@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
-import { SunSnow, Zap, Briefcase, ArrowUpRight, AlertCircle, Calendar, Users, X, ArrowLeft, Thermometer, Droplets } from 'lucide-react'
+import { SunSnow, Zap, Briefcase, ArrowUpRight, AlertCircle, Calendar, Users, X, ArrowLeft, Thermometer, Droplets, Heart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { HealthChart } from '@/components/ui/Health-chart'
 import { ChartAreaInteractive } from '@/components/ui/Parameters'
@@ -104,46 +104,8 @@ const initialItems: MaintenanceRecord[] = [
   }
 ]
 
-const cards = [
-  {
-    icon: SunSnow,
-    iconColor: 'text-green-600',
-    title: 'Active ACs',
-    value: 17,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: Zap,
-    iconColor: 'text-blue-600',
-    title: 'Power Consumption',
-    value: 243,
-    dateRange: 'Last 7 days',
-  },
-  {
-    icon: Briefcase,
-    iconColor: 'text-purple-600',
-    title: 'Maintenance Tasks',
-    value: 12,
-    dateRange: 'Last 7 days',
-  },
-  {
-    icon: ArrowUpRight,
-    iconColor: 'text-pink-600',
-    title: 'Avg. Performance',
-    value: 89,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-  {
-    icon: AlertCircle,
-    iconColor: 'text-orange-600',
-    title: 'Alerts',
-    value: 12,
-    dateRange: 'From Jan 01 - Jul 30, 2024',
-  },
-]
-
 export default function DashboardPage() {
-  const [assignedItems, setAssignedItems] = useState<any[]>([])
+  const [assignedItems, setAssignedItems] = useState<MaintenanceRecord[]>([])
   const [items, setItems] = useState<MaintenanceRecord[]>([])
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [showTechnicianDialog, setShowTechnicianDialog] = useState<string | null>(null)
@@ -153,24 +115,87 @@ export default function DashboardPage() {
   const [showAddTechnicianDialog, setShowAddTechnicianDialog] = useState(false)
   const [newTechnician, setNewTechnician] = useState({ name: '', specialization: '', phone: '', email: '' })
   const [adminPassword, setAdminPassword] = useState('')
+  const [stats, setStats] = useState({
+    active_acs: 0,
+    avg_performance: 0,
+    avg_health: 0,
+    avg_power: 0,
+    maintenance_tasks: 0,
+    health_distribution: { good: 0, fair: 0, poor: 0 }
+  })
+  const [alerts, setAlerts] = useState<any[]>([])
+  const [historyData, setHistoryData] = useState<any[]>([])
+  const [timeRange, setTimeRange] = useState("24h")
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/dashboard/stats')
+      const data = await response.json()
+      setStats(data)
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error)
+    }
+  }
+
+  const fetchAlerts = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/alerts')
+      const data = await response.json()
+      setAlerts(data)
+    } catch (error) {
+      console.error('Error fetching alerts:', error)
+    }
+  }
+
+  const fetchDashboardHistory = async () => {
+    try {
+      const response = await fetch(`http://localhost:8000/dashboard/history?range=${timeRange}`)
+      const data = await response.json()
+      setHistoryData(data)
+    } catch (error) {
+      console.error('Error fetching dashboard history:', error)
+    }
+  }
+
+  const fetchMaintenanceTasks = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/maintenance/tasks')
+      const data = await response.json()
+
+      const savedItems = localStorage.getItem('assignedMaintenanceItems')
+      if (savedItems) {
+        const parsedAssignedItems = JSON.parse(savedItems)
+        setAssignedItems(parsedAssignedItems)
+
+        const assignedIds = parsedAssignedItems.map((item: any) => item.id)
+        const filteredItems = data.filter((item: any) => !assignedIds.includes(item.id))
+        setItems(filteredItems)
+      } else {
+        setItems(data)
+      }
+    } catch (error) {
+      console.error('Error fetching maintenance tasks:', error)
+    }
+  }
 
   useEffect(() => {
-    const savedItems = localStorage.getItem('assignedMaintenanceItems')
-    const savedSelectedItems = localStorage.getItem('selectedMaintenanceItems')
-    
-    if (savedItems) {
-      const parsedAssignedItems = JSON.parse(savedItems)
-      setAssignedItems(parsedAssignedItems)
-      
-      // Filter out assigned items from initialItems
-      const assignedIds = parsedAssignedItems.map((item: any) => item.id)
-      const filteredItems = initialItems.filter(item => !assignedIds.includes(item.id))
-      setItems(filteredItems)
-    } else {
-      setItems(initialItems)
-    }
+    fetchStats()
+    fetchAlerts()
+    fetchMaintenanceTasks()
+    fetchDashboardHistory()
 
-    // Load selectedItems from localStorage
+    // Refresh data every 30 seconds
+    const interval = setInterval(() => {
+      fetchStats()
+      fetchAlerts()
+      fetchMaintenanceTasks()
+      fetchDashboardHistory()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [timeRange])
+
+  useEffect(() => {
+    const savedSelectedItems = localStorage.getItem('selectedMaintenanceItems')
     if (savedSelectedItems) {
       const parsedSelectedItems = JSON.parse(savedSelectedItems)
       setSelectedItems(new Set(parsedSelectedItems))
@@ -188,19 +213,19 @@ export default function DashboardPage() {
 
   const handleCheckboxChange = (itemId: string, checked: boolean) => {
     const newSelectedItems = new Set(selectedItems)
-    
+
     if (checked) {
       newSelectedItems.add(itemId)
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: true } : item
       ))
     } else {
       newSelectedItems.delete(itemId)
-      setItems(prev => prev.map(item => 
+      setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, scheduled: false } : item
       ))
     }
-    
+
     setSelectedItems(newSelectedItems)
   }
 
@@ -212,29 +237,29 @@ export default function DashboardPage() {
     if (showTechnicianDialog && selectedTechnician) {
       const technician = techniciansList.find(t => t.id === selectedTechnician)
       const itemToAssign = items.find(item => item.id === showTechnicianDialog)
-      
+
       if (itemToAssign && technician && technician.available) {
         // Update technician availability to unavailable
-        const updatedTechnicians = techniciansList.map(t => 
+        const updatedTechnicians = techniciansList.map(t =>
           t.id === selectedTechnician ? { ...t, available: false } : t
         )
         setTechniciansList(updatedTechnicians)
-        
+
         const updatedItem = { ...itemToAssign, technician: technician.name }
-        
+
         const newAssignedItems = [...assignedItems, updatedItem]
         setAssignedItems(newAssignedItems)
         localStorage.setItem('assignedMaintenanceItems', JSON.stringify(newAssignedItems))
-        
+
         setItems(prev => prev.filter(item => item.id !== showTechnicianDialog))
-        
+
         setSelectedItems(prev => {
           const newSet = new Set(prev)
           newSet.delete(showTechnicianDialog)
           return newSet
         })
       }
-      
+
       setShowTechnicianDialog(null)
       setSelectedTechnician('')
     }
@@ -244,15 +269,78 @@ export default function DashboardPage() {
     setShowDeleteDialog(itemId)
   }
 
-  const confirmDelete = (itemId: string) => {
-    setItems(prev => prev.filter(item => item.id !== itemId))
-    setSelectedItems(prev => {
-      const newSet = new Set(prev)
-      newSet.delete(itemId)
-      return newSet
-    })
+  const confirmDelete = async (itemId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/alerts/resolve/${itemId}`, {
+        method: 'POST',
+      })
+      if (response.ok) {
+        // Immediately refresh UI data
+        fetchAlerts()
+        fetchMaintenanceTasks()
+        fetchStats()
+
+        setItems(prev => prev.filter(item => item.id !== itemId))
+        setSelectedItems(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(itemId)
+          return newSet
+        })
+      } else {
+        console.error('Failed to resolve alert on backend')
+      }
+    } catch (error) {
+      console.error('Error calling resolve API:', error)
+    }
     setShowDeleteDialog(null)
   }
+
+  const getHealthStatus = (score: number) => {
+    if (score > 70) return { label: 'Good', color: 'text-green-600' }
+    if (score > 40) return { label: 'Fair', color: 'text-yellow-600' }
+    return { label: 'Poor', color: 'text-red-600' }
+  }
+
+  const healthStatus = getHealthStatus(stats.avg_health)
+
+  const cards = [
+    {
+      icon: SunSnow,
+      iconColor: 'text-green-600',
+      title: 'Active ACs',
+      value: stats.active_acs,
+      unit: '',
+    },
+    {
+      icon: Zap,
+      iconColor: 'text-blue-600',
+      title: 'Power Consumption',
+      value: stats.avg_power,
+      unit: ' kW',
+    },
+    {
+      icon: Briefcase,
+      iconColor: 'text-purple-600',
+      title: 'Maintenance Tasks',
+      value: stats.maintenance_tasks,
+      unit: '',
+    },
+    {
+      icon: ArrowUpRight,
+      iconColor: 'text-pink-600',
+      title: 'Avg. Performance',
+      value: stats.avg_performance,
+      unit: '%',
+    },
+    {
+      icon: Heart,
+      iconColor: healthStatus.color,
+      title: 'System Health',
+      value: stats.avg_health,
+      unit: '%',
+      status: healthStatus.label
+    },
+  ]
 
   return (
     <div className="p-4 lg:p-6">
@@ -260,19 +348,26 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
         <p className="text-muted-foreground">AC Management System Overview</p>
       </div>
-      
+
       <div className="@container grow w-full space-y-6">
         <div className="grid grid-cols-1 @3xl:grid-cols-5 gap-4">
           {cards.map((card, i) => (
             <Card key={i}>
               <CardContent className="flex flex-col h-full p-4">
-                <div className="flex items-center mb-4">
+                <div className="flex items-center justify-between mb-4">
                   <card.icon className={cn('size-5', card.iconColor)} />
+                  {card.status && (
+                    <Badge variant="outline" className={cn("text-[10px] uppercase font-bold", card.iconColor)}>
+                      {card.status}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex-1 flex flex-col justify-between grow">
                   <div>
                     <div className="text-sm font-medium text-muted-foreground mb-1">{card.title}</div>
-                    <div className="text-2xl font-bold text-foreground">{card.value.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-foreground">
+                      {(card.value ?? 0).toLocaleString()}{card.unit}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -281,10 +376,14 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-3">
-            <ChartAreaInteractive />
+            <ChartAreaInteractive
+              data={historyData}
+              timeRange={timeRange}
+              onTimeRangeChange={setTimeRange}
+            />
           </div>
           <div className="lg:col-span-1">
-            <HealthChart />
+            <HealthChart data={stats.health_distribution} />
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -296,33 +395,29 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="flex-1 overflow-auto min-h-[20rem] max-h-[30rem] lg:min-h-[25rem] lg:max-h-[35rem]">
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                    Pending Maintenance
-                  </h3>
-                  <div className="overflow-hidden rounded-md border">
-                    <table className="w-full">
+                  <div className="w-full overflow-x-auto rounded-md border">
+                    <table className="w-full table-auto">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-4" style={{ width: '150px' }}>AC Unit</th>
-                          <th className="text-left p-4" style={{ width: '120px' }}>Room</th>
-                          <th className="text-left p-4">Issue</th>
-                          <th className="text-left p-4" style={{ width: '100px' }}>Criticality</th>
-                          <th className="text-left p-4" style={{ width: '120px' }}></th>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-4 font-semibold">AC Unit</th>
+                          <th className="text-left p-4 font-semibold whitespace-nowrap">Room</th>
+                          <th className="text-left p-4 font-semibold hidden md:table-cell whitespace-nowrap">Last Service</th>
+                          <th className="text-left p-4 font-semibold hidden lg:table-cell whitespace-nowrap">Next Service</th>
+                          <th className="text-left p-4 font-semibold hidden sm:table-cell w-full whitespace-nowrap">Issue</th>
+                          <th className="text-left p-4 font-semibold">Criticality</th>
+                          <th className="text-left p-4 w-[100px]"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map(item => (
-                          <tr 
-                            key={item.id} 
-                            className={`border hover:bg-accent/50 transition-colors ${
-                              selectedItems.has(item.id) ? 'bg-green-100 dark:bg-green-900' : ''
-                            } ${
-                              showDeleteDialog === item.id ? 'bg-red-100 dark:bg-red-900' : ''
-                            }`}
+                          <tr
+                            key={item.id}
+                            className={`border hover:bg-accent/50 transition-colors ${selectedItems.has(item.id) ? 'bg-green-100 dark:bg-green-900' : ''
+                              } ${showDeleteDialog === item.id ? 'bg-red-100 dark:bg-red-900' : ''
+                              }`}
                             style={{ height: '60px' }}
                           >
-                            <td className="p-4" style={{ width: '150px' }}>
+                            <td className="p-4">
                               <div className="flex items-center gap-2">
                                 <input
                                   type="checkbox"
@@ -333,33 +428,32 @@ export default function DashboardPage() {
                                 <span className="font-medium whitespace-nowrap">{item.deviceId}</span>
                               </div>
                             </td>
-                            <td className="p-4" style={{ width: '120px' }}>{item.room}</td>
-                            <td className="p-4">{item.issue}</td>
-                            <td className="p-4" style={{ width: '100px' }}>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                item.criticality === 'High' ? 'bg-red-100 text-red-700' :
+                            <td className="p-4 whitespace-nowrap">{item.room}</td>
+                            <td className="p-4 hidden md:table-cell whitespace-nowrap">{item.lastService}</td>
+                            <td className="p-4 hidden lg:table-cell whitespace-nowrap">{item.nextService}</td>
+                            <td className="p-4 hidden sm:table-cell whitespace-nowrap">{item.issue}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.criticality === 'High' ? 'bg-red-100 text-red-700' :
                                 item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
+                                  'bg-green-100 text-green-700'
+                                }`}>
                                 {item.criticality}
                               </span>
                             </td>
-                            <td className="p-4" style={{ width: '120px' }}>
+                            <td className="p-4 w-[100px]">
                               <div className="flex items-center gap-3" style={{ width: '120px', height: '24px' }}>
                                 <button
                                   onClick={() => handleScheduleClick(item.id)}
-                                  className={`px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold transition-opacity flex items-center ${
-                                    selectedItems.has(item.id) ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                                  }`}
+                                  className={`px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold transition-opacity flex items-center ${selectedItems.has(item.id) ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                                    }`}
                                 >
                                   <Users className="h-3 w-3 mr-1" style={{ transform: 'rotate(0deg)' }} />
                                   Assign
                                 </button>
                                 <button
                                   onClick={() => handleRemoveItem(item.id)}
-                                  className={`w-6 h-6 bg-white text-red-500 hover:bg-red-50 flex items-center justify-center transition-all transition-colors ${
-                                    selectedItems.has(item.id) ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                                  }`}
+                                  className={`w-6 h-6 bg-white text-red-500 hover:bg-red-50 flex items-center justify-center transition-all transition-colors ${selectedItems.has(item.id) ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                                    }`}
                                 >
                                   <X className="h-4 w-4 font-bold" />
                                 </button>
@@ -382,45 +476,60 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="flex-1 min-h-[20rem] lg:min-h-[25rem]">
                 <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
-                    <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-orange-900 dark:text-orange-100">High Temperature Alert</p>
-                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">AC Unit #5 temperature exceeded threshold</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
+                  {alerts.length > 0 ? (
+                    alerts.map((alert) => (
+                      <div
+                        key={alert.alert_id}
+                        className={cn(
+                          "flex items-start gap-3 p-3 rounded-lg border",
+                          alert.alert_criticality === 'Critical' ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950" :
+                            alert.alert_criticality === 'Warning' ? "border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950" :
+                              "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950"
+                        )}
+                      >
+                        <AlertCircle className={cn(
+                          "h-5 w-5 mt-0.5",
+                          alert.alert_criticality === 'Critical' ? "text-red-600 dark:text-red-400" :
+                            alert.alert_criticality === 'Warning' ? "text-orange-600 dark:text-orange-400" :
+                              "text-blue-600 dark:text-blue-400"
+                        )} />
+                        <div className="flex-1">
+                          <p className={cn(
+                            "text-sm font-medium",
+                            alert.alert_criticality === 'Critical' ? "text-red-900 dark:text-red-100" :
+                              alert.alert_criticality === 'Warning' ? "text-orange-900 dark:text-orange-100" :
+                                "text-blue-900 dark:text-blue-100"
+                          )}>
+                            {alert.alert_text}
+                          </p>
+                          <p className={cn(
+                            "text-xs mt-1",
+                            alert.alert_criticality === 'Critical' ? "text-red-700 dark:text-red-300" :
+                              alert.alert_criticality === 'Warning' ? "text-orange-700 dark:text-orange-300" :
+                                "text-blue-700 dark:text-blue-300"
+                          )}>
+                            Device: {alert.device_id}
+                            {alert.recommendation && ` • ${alert.recommendation}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(alert.time_stamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-10">
+                      <AlertCircle className="h-10 w-10 mb-2 opacity-20" />
+                      <p>No active alerts</p>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-                    <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Maintenance Due</p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">AC Unit #12 scheduled maintenance in 3 days</p>
-                      <p className="text-xs text-muted-foreground mt-1">5 hours ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
-                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-red-900 dark:text-red-100">Power Consumption Spike</p>
-                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">Unusual power consumption detected in AC Unit #8</p>
-                      <p className="text-xs text-muted-foreground mt-1">1 day ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">Filter Replacement</p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">AC Unit #3 filter needs replacement</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 days ago</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
-      
+
       {showTechnicianDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full">
@@ -453,9 +562,8 @@ export default function DashboardPage() {
                     <div className="font-medium">{technician.name}</div>
                     <div className="text-sm text-muted-foreground">{technician.specialization}</div>
                   </div>
-                  <div className={`ml-auto px-2 py-1 rounded-full text-xs ${
-                    technician.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                  <div className={`ml-auto px-2 py-1 rounded-full text-xs ${technician.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
                     {technician.available ? 'Available' : 'Unavailable'}
                   </div>
                 </div>
@@ -572,7 +680,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      
+
       {showDeleteDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-full">

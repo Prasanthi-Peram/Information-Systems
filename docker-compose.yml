@@ -63,9 +63,13 @@ services:
        condition: service_started
       ml:
         condition: service_healthy
+      data_loader:
+        condition: service_completed_successfully
     networks:
       - app-net
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
   ml:
     build: ./ml
     restart: no
@@ -101,6 +105,27 @@ services:
       echo 'Training complete. Keeping container alive for Healthcheck...' &&
       tail -f /dev/null
       "
+  
+  data_loader:
+    build: ./api
+    environment:
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_TRAIN_DATA=${S3_TRAIN_DATA}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-net
+    volumes:
+      - ./api:/app
+    command: python load_data.py
 
 volumes:
   postgres_data:

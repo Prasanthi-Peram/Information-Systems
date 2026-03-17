@@ -1,6 +1,5 @@
 "use client"
 
-import { TrendingUp } from "lucide-react"
 import { Pie, PieChart, ResponsiveContainer, Cell, Tooltip } from "recharts"
 import {
   Card,
@@ -12,15 +11,8 @@ import {
 } from "@/components/ui/Card"
 import {
   ChartContainer,
-  ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/Chart"
-
-const chartData = [
-  { status: "good", count: 275, fill: "#22c55e" },
-  { status: "fair", count: 200, fill: "#eab308" },
-  { status: "poor", count: 187, fill: "#ef4444" },
-]
 
 const chartConfig = {
   count: {
@@ -46,9 +38,25 @@ const COLORS = [
   "#ef4444", // red for poor
 ]
 
-export function HealthChart() {
+interface HealthDistribution {
+  good: number
+  fair: number
+  poor: number
+}
+
+interface HealthChartProps {
+  data?: HealthDistribution
+}
+
+export function HealthChart({ data }: HealthChartProps) {
+  const chartData = [
+    { status: "good", count: data?.good ?? 0, fill: "#22c55e" },
+    { status: "fair", count: data?.fair ?? 0, fill: "#eab308" },
+    { status: "poor", count: data?.poor ?? 0, fill: "#ef4444" },
+  ]
+
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col h-full">
       <CardHeader className="items-center pb-0">
         <CardTitle>Health Status</CardTitle>
         <CardDescription>AC System Health Distribution</CardDescription>
@@ -95,8 +103,22 @@ export function HealthChart() {
           </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="text-muted-foreground leading-none">
+      <CardFooter className="flex-col gap-4 text-sm">
+        <div className="flex items-center justify-center gap-4 w-full">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-sm bg-[#22c55e]" />
+            <span className="text-muted-foreground font-medium">Good</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-sm bg-[#eab308]" />
+            <span className="text-muted-foreground font-medium">Fair</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-sm bg-[#ef4444]" />
+            <span className="text-muted-foreground font-medium">Poor</span>
+          </div>
+        </div>
+        <div className="text-muted-foreground leading-none text-center">
           Health status distribution across all AC units
         </div>
       </CardFooter>

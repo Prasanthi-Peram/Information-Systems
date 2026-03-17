@@ -26,8 +26,8 @@ export function getMockDeviceData(deviceId: string, room: string): DeviceData {
   const condition = performance >= 90 ? 'Good' : performance >= 70 ? 'Fair' : 'Poor'
   const conditionColor =
     performance >= 90 ? 'text-green-500' :
-    performance >= 70 ? 'text-yellow-500' :
-    'text-red-500'
+      performance >= 70 ? 'text-yellow-500' :
+        'text-red-500'
 
   return {
     deviceId,

@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useActionState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { Button } from '@/components/ui/Button'
 import {
   Form,
@@ -23,8 +23,7 @@ const initialState: ActionResponse = {
   errors: undefined,
 }
 
-
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const roleParam = searchParams.get('role') as 'administrator' | 'technician' | null
@@ -48,8 +47,8 @@ export default function SignUpPage() {
 
       // Handle successful submission
       if (result.success) {
-        toast.success('Account created successfully')
-        router.push('/dashboard')
+        toast.success('Account created successfully. Please sign in.')
+        router.push(`/signin?role=${role}`)
       }
 
       return result
@@ -136,7 +135,7 @@ export default function SignUpPage() {
                 required
                 disabled={isPending}
                 aria-describedby="email-error"
-                className={["font-mono",state?.errors?.email ? 'border-red-500' : ''].join(" ")}
+                className={["font-mono", state?.errors?.email ? 'border-red-500' : ''].join(" ")}
               />
               {state?.errors?.email && (
                 <p id="email-error" className="text-sm text-red-500">
@@ -154,7 +153,7 @@ export default function SignUpPage() {
                 required
                 disabled={isPending}
                 aria-describedby="username-error"
-                className={["font-mono",state?.errors?.username ? 'border-red-500' : ''].join(" ")}
+                className={["font-mono", state?.errors?.username ? 'border-red-500' : ''].join(" ")}
               />
               {state?.errors?.username && (
                 <p id="username-error" className="text-sm text-red-500">
@@ -207,7 +206,7 @@ export default function SignUpPage() {
               </Button>
             </div>
           </Form>
-          
+
           <div className="mt-6 text-center">
             <p className="font-mono text-sm text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
@@ -222,5 +221,13 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignUpForm />
+    </Suspense>
   )
 }

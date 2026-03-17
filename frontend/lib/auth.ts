@@ -50,7 +50,6 @@ type DbUser = {
   email: string
   password: Uint8Array | string
   name?: string | null
-  avatar?: string | null
   role?: string | null
   campus_id?: string | null
   created_at?: string
@@ -61,7 +60,7 @@ type DbUser = {
 export async function getUserByEmail(email: string): Promise<DbUser | null> {
   try {
     const result = await pool.query(
-      `SELECT id, email, password, name, avatar, role, campus_id, created_at 
+      `SELECT id, email, password, name, role, campus_id, created_at 
        FROM users WHERE email = $1`,
       [email]
     )
@@ -79,8 +78,7 @@ export async function createUser(
   password: string,
   username: string,
   role: string,
-  campusId: string | null = null,
-  avatar: string | null = null
+  campusId: string | null = null
 ): Promise<{ id: string; email: string } | null> {
   try {
     const hashedPassword = await hashPassword(password)
@@ -90,10 +88,10 @@ export async function createUser(
     let result
     try {
       result = await pool.query(
-        `INSERT INTO users (id, email, password, name, avatar, role, campus_id, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO users (id, email, password, name, role, campus_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, email`,
-        [id, email, hashedPassword, username, avatar, role, campusId, nowIso]
+        [id, email, hashedPassword, username, role, campusId, nowIso]
       )
     } catch (error) {
       if (error instanceof Error && error.message.includes('column')) {

@@ -29,9 +29,25 @@ def get_connection():
 
 
 def insert_devices(cur, chunk):
-
+    # Get unique locations from the chunk
+    locations = chunk["location"].unique().tolist()
+    
+    # Insert locations and get their IDs
+    for loc in locations:
+        cur.execute(
+            "INSERT INTO location (location_name) VALUES (%s) ON CONFLICT (location_name) DO NOTHING",
+            (loc,)
+        )
+    
+    # Fetch all location mappings
+    cur.execute("SELECT location_id, location_name FROM location")
+    loc_map = {name: id for id, name in cur.fetchall()}
+    
+    # Map location names to IDs in the chunk
+    chunk["location_id"] = chunk["location"].map(loc_map)
+    
     devices = (
-        chunk[["device_id", "location"]]
+        chunk[["device_id", "location_id"]]
         .drop_duplicates()
         .values
         .tolist()
@@ -39,7 +55,7 @@ def insert_devices(cur, chunk):
 
     cur.executemany(
         """
-        INSERT INTO ac_device (device_id, location)
+        INSERT INTO ac_device (device_id, location_id)
         VALUES (%s,%s)
         ON CONFLICT (device_id) DO NOTHING
         """,

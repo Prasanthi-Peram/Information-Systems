@@ -2,7 +2,7 @@ import mlflow.pyfunc
 from mlflow.tracking import MlflowClient
 import numpy as np
 import pandas as pd
-from db import insert_prediction, insert_device_telemetry, insert_ac_device
+from db import insert_live_prediction, insert_live_device_telemetry, insert_live_ac_device, get_recent_live_telemetry, insert_alert
 
 def load_all_models():
     print("Starting load_all_models", flush=True)
@@ -28,13 +28,42 @@ def load_all_models():
     print("All models downloaded and loaded", flush=True)
     return models
 
-def run_prediction(data,models):
+def generate_alerts(data, prediction):
+    """
+    Generates alerts based on telemetry data and ML predictions.
+    """
+    alerts = []
 
+    if data.get("external_temp", 0) > 40:
+        alerts.append({
+            "text": "High Temperature Alert",
+            "criticality": "Warning",
+            "recommendation": "Check cooling load"
+        })
+
+    if data.get("real_power", 0) > 2000:
+        alerts.append({
+            "text": "Power Consumption Spike",
+            "criticality": "Critical",
+            "recommendation": "Inspect compressor"
+        })
+
+    if prediction.get("health_score", 100) < 60:
+        alerts.append({
+            "text": "Maintenance Required",
+            "criticality": "Critical",
+            "recommendation": "Immediate servicing recommended"
+        })
+
+    return alerts
+
+def run_prediction(data, models):
     print("I run the model for prediction")
-    insert_ac_device(data["device_id"], data["device_id"][:4])
-    print("I insert ac device")
-    insert_device_telemetry(data)
-    print("log insert")
+    location = data.get("location", data["device_id"][:4])
+    insert_live_ac_device(data["device_id"], location)
+    print("I insert live ac device")
+    insert_live_device_telemetry(data)
+    print("live log insert")
 
     features = create_features(data)
 
@@ -52,8 +81,14 @@ def run_prediction(data,models):
         "model_version": models["version"]
     }
 
-    insert_prediction(prediction)
+    insert_live_prediction(prediction)
     print("prediction inserted")
+
+    # Generate and insert alerts
+    alerts = generate_alerts(data, prediction)
+    for alert in alerts:
+        insert_alert(data["device_id"], data["time_stamp"], alert)
+        print(f"Alert inserted: {alert['text']}")
 
     return prediction
 
@@ -71,11 +106,32 @@ def create_features(data):
     hour_sin = np.sin(2 * np.pi * ts.hour / 24)
     hour_cos = np.cos(2 * np.pi * ts.hour / 24)
 
-    # 3. Handling Rolling/Diff Features for a Single Row
-    rolling_mean_power = data["real_power"] 
-    power_variability = 0.0
-    current_diff = 0.0
-    electrical_instability = 0.0
+    # 3. Fetch recent data for rolling features
+    recent_data = get_recent_live_telemetry(data["device_id"], limit=2)
+    
+    # Create a DataFrame with recent data + current data
+    # Note: recent_data is ordered by time_stamp DESC, so we reverse it
+    history_df = pd.DataFrame(recent_data[::-1])
+    current_row = pd.DataFrame([data])
+    df = pd.concat([history_df, current_row], ignore_index=True)
+
+    # 4. Calculate Advanced Features
+    # Rolling stats (window=3)
+    rolling_std_power = df["real_power"].rolling(3, min_periods=1).std().iloc[-1]
+    rolling_mean_power = df["real_power"].rolling(3, min_periods=1).mean().iloc[-1]
+    
+    power_variability = (
+        rolling_std_power / rolling_mean_power if rolling_mean_power != 0 else 0.0
+    )
+    
+    current_diff = df["current"].diff().iloc[-1] if len(df) > 1 else 0.0
+    
+    electrical_instability = df["current"].rolling(3, min_periods=1).std().iloc[-1]
+
+    # Fill NaNs (std of 1 element is NaN)
+    rolling_std_power = 0.0 if pd.isna(rolling_std_power) else rolling_std_power
+    electrical_instability = 0.0 if pd.isna(electrical_instability) else electrical_instability
+    current_diff = 0.0 if pd.isna(current_diff) else current_diff
 
     # 4. Construct the Vector in the EXACT order as training
     feature_vector = [

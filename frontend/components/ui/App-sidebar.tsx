@@ -2,6 +2,7 @@
 
 import { Home, Drill, MonitorCog, School, AirVent, ChevronDown, ChevronRight, Settings, LogOut, User, Shield, UserCheck } from "lucide-react"
 import { useState } from "react"
+import Link from "next/link"
 
 import {
   Sidebar,
@@ -44,27 +45,27 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="space-y-4">
               <SidebarMenuItem>
-                <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-                  <a href="/dashboard">
+                <SidebarMenuButton className="text-slate-200 hover:text-white hover:bg-slate-800/50">
+                  <Link href="/dashboard" className="flex items-center gap-3 w-full">
                     <Home className="h-7 w-7" />
                     <span className="text-base">Home</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-                  <a href="/maintenance">
+                <SidebarMenuButton className="text-slate-200 hover:text-white hover:bg-slate-800/50">
+                  <Link href="/maintenance" className="flex items-center gap-3 w-full">
                     <Drill className="h-7 w-7" />
                     <span className="text-base">Maintenance</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-                  <a href="/rooms">
+                <SidebarMenuButton className="text-slate-200 hover:text-white hover:bg-slate-800/50">
+                  <Link href="/rooms" className="flex items-center gap-3 w-full">
                     <School className="h-7 w-7" />
                     <span className="text-base">Rooms</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -74,16 +75,16 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-slate-800">
         <SidebarMenu className="space-y-2">
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="text-slate-200 hover:text-white hover:bg-slate-800/50">
-              <a href="/settings">
+            <SidebarMenuButton className="text-slate-200 hover:text-white hover:bg-slate-800/50">
+              <Link href="/settings" className="flex items-center gap-3 w-full">
                 <Settings className="h-7 w-7" />
                 <span className="text-base">Settings</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <form action={signOutAction} className="w-full">
-              <SidebarMenuButton 
+              <SidebarMenuButton
                 type="submit"
                 className="text-red-400 hover:text-red-300 hover:bg-red-900/20 w-full"
               >
