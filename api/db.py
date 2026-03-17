@@ -871,3 +871,42 @@ def get_device_history(device_id: str = None, time_range: str = "24h"):
                 del d['bucket']
             results.append(d)
         return results
+
+
+def get_user_by_email(email: str):
+    """Fetch a single user by email."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, email, password, name, role, campus_id, created_at
+            FROM users
+            WHERE email = %s
+            """,
+            (email,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))
+
+
+def insert_user(user: dict):
+    """
+    Insert a user record.
+    Expects keys: id, email, password, name, role, campus_id, created_at.
+    Password should already be hashed by the caller.
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO users (id, email, password, name, role, campus_id, created_at)
+            VALUES (%(id)s, %(email)s, %(password)s, %(name)s, %(role)s, %(campus_id)s, %(created_at)s)
+            RETURNING id, email;
+            """,
+            user,
+        )
+        row = cur.fetchone()
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))

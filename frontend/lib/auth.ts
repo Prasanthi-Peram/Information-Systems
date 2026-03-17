@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import * as jose from 'jose'
 import { cache } from 'react'
-import { pool } from './db'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // JWT types
 interface JWTPayload {
@@ -59,12 +60,25 @@ type DbUser = {
 // Get user by email
 export async function getUserByEmail(email: string): Promise<DbUser | null> {
   try {
-    const result = await pool.query(
-      `SELECT id, email, password, name, role, campus_id, created_at 
-       FROM users WHERE email = $1`,
-      [email]
+    const res = await fetch(
+      `${API_URL}/auth/users?email=${encodeURIComponent(email)}`,
+      {
+        method: 'GET',
+        // Always hit API for latest user info
+        cache: 'no-store',
+      }
     )
-    return result.rows[0] as DbUser | null
+
+    if (res.status === 404) {
+      return null
+    }
+
+    if (!res.ok) {
+      throw new Error(`API error: ${res.status}`)
+    }
+
+    const user = (await res.json()) as DbUser
+    return user
   } catch (error) {
     console.error('Database error in getUserByEmail:', error instanceof Error ? error.message : 'Unknown error')
     throw new Error(error instanceof Error ? error.message : 'Database error')
@@ -85,30 +99,29 @@ export async function createUser(
     const nowIso = new Date().toISOString()
     const id = crypto.randomUUID()
 
-    let result
-    try {
-      result = await pool.query(
-        `INSERT INTO users (id, email, password, name, role, campus_id, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, email`,
-        [id, email, hashedPassword, username, role, campusId, nowIso]
-      )
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('column')) {
-        if (error.message.includes('role')) {
-          console.error('Role column does not exist in database. Please run: ALTER TABLE users ADD COLUMN role VARCHAR(20);')
-          throw new Error('Database schema error: role column is missing. Please add the role column to the users table.')
-        } else if (error.message.includes('campus_id')) {
-          console.error('Campus ID column does not exist in database. Please run: ALTER TABLE users ADD COLUMN campus_id VARCHAR(50);')
-          throw new Error('Database schema error: campus_id column is missing. Please add the campus_id column to the users table.')
-        }
-        throw error
-      } else {
-        throw error
-      }
+    const res = await fetch(`${API_URL}/auth/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id,
+        email,
+        password: hashedPassword,
+        name: username,
+        role,
+        campus_id: campusId,
+        created_at: nowIso,
+      }),
+    })
+
+    if (!res.ok) {
+      const msg = await res.text()
+      throw new Error(msg || `API error: ${res.status}`)
     }
 
-    return result.rows[0] as { id: string; email: string } | null
+    const data = (await res.json()) as { id: string; email: string }
+    return data
   } catch (error) {
     console.error('Error creating user:', error)
     return null

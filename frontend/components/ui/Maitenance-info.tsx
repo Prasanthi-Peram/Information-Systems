@@ -279,7 +279,7 @@ const TableSelectableRowDemo = () => {
     return markedForDeletion.has(itemId)
   }
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (showDeleteDialog) {
       setItems(prev => prev.filter(item => item.id !== showDeleteDialog))
       setSelectedItems(prev => {
@@ -292,6 +292,17 @@ const TableSelectableRowDemo = () => {
         newSet.delete(showDeleteDialog)
         return newSet
       })
+
+      // When user confirms deletion of a maintenance task,
+      // trigger backend retraining (non-blocking for UI)
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/maintenance/retrain`, {
+          method: 'POST'
+        })
+      } catch (e) {
+        console.error('Failed to trigger retraining', e)
+      }
+
       setShowDeleteDialog(null)
     }
   }

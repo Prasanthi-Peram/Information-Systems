@@ -1,15 +1,13 @@
 import os
-from pathlib import Path
 from datetime import datetime
 
-import joblib
 import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
 import psycopg
 
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, IsolationForest
 from sklearn.preprocessing import StandardScaler
 
 
@@ -50,6 +48,30 @@ def load_data():
         df = pd.read_sql(query, conn)
 
     return df
+
+
+# ============================================================
+# FEEDBACK / FALSE-ALARM STATS
+# ============================================================
+
+def get_false_alarm_count(hours: int = 24) -> int:
+    """
+    Count how many alerts were marked as false in the recent window.
+    This is logged to MLflow so retraining runs are tied to feedback.
+    """
+    sql = """
+        SELECT COUNT(*) 
+        FROM alerts 
+        WHERE is_true_alarm = FALSE 
+          AND created_at > NOW() - INTERVAL %s
+    """
+    interval = f"{hours} hours"
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (interval,))
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
 
 
 # ============================================================
@@ -123,7 +145,11 @@ def create_targets(df):
         df["real_power"].replace(0, 1)
     ).rank(pct=True) * 100
 
-    df["health_target"] = df["power_factor"] * 100
+    df["health_target"] = (
+    0.4 * (df["thermal_stress"].rank(pct=True)) +        # cooling ability
+    0.3 * (df["power_factor"]) +                         # electrical efficiency
+    0.3 * (1 - df["power_variability"].rank(pct=True))   # stability
+) * 100
 
     df["state_target"] = (df["real_power"] > 500).astype(int)
 
@@ -145,6 +171,12 @@ def main():
         return
 
     df = create_targets(engineer_features(raw_df))
+
+    # Drop rows with invalid targets to avoid NaNs in y during training
+    df = df.dropna(subset=["perf_target", "health_target", "state_target"])
+    if df.empty:
+        print("No valid rows left after dropping NaNs in targets.")
+        return
 
     features = [
         "current",
@@ -175,6 +207,16 @@ def main():
     y_perf = df["perf_target"]
     y_health = df["health_target"]
     y_state = df["state_target"]
+
+    # ============================================================
+    # TRAIN ANOMALY DETECTION MODEL (ISOLATION FOREST)
+    # ============================================================
+
+    model_anomaly = IsolationForest(
+        n_estimators=100,
+        contamination=0.05,
+        random_state=42
+    ).fit(X_scaled)
 
     # ============================================================
     # TRAIN MODELS (TREE SIZE CONTROLLED)
@@ -208,29 +250,22 @@ def main():
     ).fit(X_scaled, y_state)
 
     # ============================================================
-    # SAVE MODELS LOCALLY
-    # ============================================================
-
-    model_dir = Path("/app/models")
-    model_dir.mkdir(exist_ok=True)
-
-    joblib.dump(scaler, model_dir / "scaler.joblib", compress=3)
-    joblib.dump(model_perf, model_dir / "model_perf.joblib", compress=3)
-    joblib.dump(model_health, model_dir / "model_health.joblib", compress=3)
-    joblib.dump(model_state, model_dir / "model_state.joblib", compress=3)
-
-    # ============================================================
     # MLFLOW LOGGING
     # ============================================================
 
     version = f"v_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+
+    # Capture feedback signal (false alarms) at retrain time
+    false_alarm_count_24h = get_false_alarm_count(24)
 
     with mlflow.start_run(run_name="AC_Training"):
 
         mlflow.log_param("model_version", version)
 
         mlflow.log_metric("avg_performance", float(df["perf_target"].mean()))
+        mlflow.log_metric("false_alarm_count_24h", false_alarm_count_24h)
 
+        # Core models
         mlflow.sklearn.log_model(
             model_perf,
             artifact_path="performance_model",
@@ -247,6 +282,20 @@ def main():
             model_state,
             artifact_path="state_model",
             registered_model_name="AC_State"
+        )
+
+        # Anomaly detection model
+        mlflow.sklearn.log_model(
+            model_anomaly,
+            artifact_path="anomaly_model",
+            registered_model_name="AC_Anomaly"
+        )
+
+        # Shared scaler for online inference
+        mlflow.sklearn.log_model(
+            scaler,
+            artifact_path="scaler_model",
+            registered_model_name="AC_Scaler"
         )
 
     print(" Training completed successfully")

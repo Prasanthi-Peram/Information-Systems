@@ -1,15 +1,18 @@
 import json
 from datetime import datetime
 from contextlib import asynccontextmanager
+import asyncio
+import subprocess
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db import (
     insert_device_telemetry, get_dashboard_stats, get_rooms_status,
     get_room_details, get_alerts, get_maintenance_tasks, get_device_details,
-    resolve_alert_by_device, resolve_alert, create_room, create_ac_device, get_device_history
+    resolve_alert_by_device, resolve_alert, create_room, create_ac_device,
+    get_device_history, get_user_by_email, insert_user
 )
 from ml_utils import load_all_models, run_prediction
 
@@ -44,6 +47,16 @@ class RoomCreate(BaseModel):
 class DeviceCreate(BaseModel):
     device_id: str
     room_name: str
+
+
+class UserCreate(BaseModel):
+    id: str
+    email: str
+    password: str  # already hashed by frontend
+    name: str
+    role: str
+    campus_id: str | None = None
+    created_at: str
 
 app = FastAPI(lifespan=lifespan)
 
@@ -160,3 +173,50 @@ async def resolve_alert_endpoint(alert_id: int):
         return {"status": "success", "message": f"Alert {alert_id} resolved"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@app.get("/auth/users")
+async def api_get_user_by_email(email: str):
+    """
+    Public API for frontend auth:
+    Returns user by email or 404 if not found.
+    """
+    user = get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@app.post("/auth/users")
+async def api_create_user(payload: UserCreate):
+    """
+    Public API for frontend auth:
+    Inserts a new user record. Expects password already hashed.
+    """
+    try:
+        user_dict = insert_user(payload.dict())
+        return user_dict
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/maintenance/retrain")
+async def trigger_retrain():
+    """
+    Trigger model retraining asynchronously from the API.
+    Intended to be called when the user confirms deleting a maintenance task.
+    """
+
+    async def run_training():
+        loop = asyncio.get_event_loop()
+        # Run the training script in a background thread so we don't block the API
+        def _run():
+            try:
+                subprocess.run(["python", "/app/training/train.py"], check=True)
+            except Exception as e:
+                print(f"Retrain failed: {e}", flush=True)
+
+        await loop.run_in_executor(None, _run)
+
+    asyncio.create_task(run_training())
+    return {"status": "started", "message": "Retraining triggered"}

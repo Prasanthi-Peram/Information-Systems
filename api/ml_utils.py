@@ -1,4 +1,5 @@
 import mlflow.pyfunc
+import mlflow.sklearn
 from mlflow.tracking import MlflowClient
 import numpy as np
 import pandas as pd
@@ -23,8 +24,12 @@ def load_all_models():
         "performance": mlflow.pyfunc.load_model("models:/AC_Performance/latest"),
         "health": mlflow.pyfunc.load_model("models:/AC_Health/latest"),
         "state": mlflow.pyfunc.load_model("models:/AC_State/latest"),
+        # Online anomaly detection + shared scaler (loaded from MLflow, not local disk)
+        "anomaly": mlflow.sklearn.load_model("models:/AC_Anomaly/latest"),
+        "scaler": mlflow.sklearn.load_model("models:/AC_Scaler/latest"),
         "version": version_str
     }
+
     print("All models downloaded and loaded", flush=True)
     return models
 
@@ -67,9 +72,47 @@ def run_prediction(data, models):
 
     features = create_features(data)
 
+    # Core predictions (performance, health, state)
     perf = models["performance"].predict([features])[0]
     health = models["health"].predict([features])[0]
     state = models["state"].predict([features])[0]
+
+    # ============================================================
+    # REAL-TIME ANOMALY DETECTION (ISOLATION FOREST)
+    # ============================================================
+    anomaly_flag = 0
+    anomaly_score = None
+
+    scaler = models.get("scaler")
+    anomaly_model = models.get("anomaly")
+
+    if scaler is not None and anomaly_model is not None:
+        try:
+            X = np.array(features, dtype=float).reshape(1, -1)
+            X_scaled = scaler.transform(X)
+
+            pred_anom = anomaly_model.predict(X_scaled)[0]
+            anomaly_score = float(anomaly_model.decision_function(X_scaled)[0])
+            anomaly_flag = 1 if pred_anom == -1 else 0
+
+            if anomaly_flag == 1:
+                # Map anomaly severity based on score (lower → more anomalous)
+                severity = "Info"
+                if anomaly_score < -0.2:
+                    severity = "Critical"
+                elif anomaly_score < -0.1:
+                    severity = "Warning"
+
+                alert = {
+                    "text": "Anomaly detected by Isolation Forest",
+                    "criticality": severity,
+                    "recommendation": "Investigate device behaviour; abnormal telemetry pattern detected"
+                }
+                insert_alert(data["device_id"], data["time_stamp"], alert)
+                print(f"Anomaly alert inserted with severity: {severity}", flush=True)
+        except Exception as e:
+            print(f"Error during anomaly detection: {e}", flush=True)
+
     print("All predictions done")
 
     prediction = {
@@ -78,7 +121,9 @@ def run_prediction(data, models):
         "predicted_state": int(state),
         "health_score": float(health),
         "performance_score": float(perf),
-        "model_version": models["version"]
+        "model_version": models["version"],
+        "anomaly_flag": int(anomaly_flag),
+        "anomaly_score": float(anomaly_score) if anomaly_score is not None else None
     }
 
     insert_live_prediction(prediction)
