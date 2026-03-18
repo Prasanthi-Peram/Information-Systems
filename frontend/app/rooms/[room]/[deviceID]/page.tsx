@@ -190,6 +190,7 @@ function DeviceReport({ room, deviceID }: { room: string; deviceID: string }) {
               data={historyData}
               timeRange={timeRange}
               onTimeRangeChange={setTimeRange}
+              allowedParameters={["voltage", "current", "power"]}
             />
           </div>
         </div>
@@ -258,50 +259,63 @@ function DeviceReport({ room, deviceID }: { room: string; deviceID: string }) {
         </div>
       </div>
 
-      {/* Temperature and Humidity Graph - Bottom */}
+      {/* Maintenance and Environment Section - Swapped Order */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
-        <div className="lg:col-span-3 flex">
-          <div className="w-full">
-            <ChartAreaInteractive
-              title="Temperature and Humidity"
-              showParameterSelect={false}
-              defaultParameter="temperature"
-              data={historyData}
-              timeRange={timeRange}
-              onTimeRangeChange={setTimeRange}
-            />
-          </div>
-        </div>
         <div className="lg:col-span-1 flex">
           {/* Maintenance Info Card */}
           <Card className="bg-white dark:bg-white border-gray-200 w-full">
-            <CardHeader className="py-3">
+            <CardHeader className="pt-8 pb-3">
               <CardTitle className="text-sm text-gray-900">Maintenance Info</CardTitle>
             </CardHeader>
-            <CardContent className="py-3">
-              <div className="space-y-3">
+            <CardContent className="pt-10 pb-6 flex-1 flex flex-col">
+              <div className="flex flex-col gap-y-6">
+                {/* Efficiency Score */}
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Efficiency Score</span>
+                  <span className="text-sm text-gray-900 font-semibold">{deviceData.performance}%</span>
+                </div>
+
+                {/* Health Status */}
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Health Status</span>
+                  <span className={cn("text-sm font-semibold", deviceData.conditionColor)}>{deviceData.condition}</span>
+                </div>
+
                 {/* Last Service */}
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                  <span className="text-xs text-gray-600">Last Service</span>
-                  <span className="text-xs text-gray-900 font-semibold">{deviceData.lastService}</span>
+                  <span className="text-sm text-gray-600">Last Service</span>
+                  <span className="text-sm text-gray-900 font-semibold">{deviceData.lastService}</span>
                 </div>
 
                 {/* Next Service Due */}
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                  <span className="text-xs text-gray-600">Next Service Due</span>
-                  <span className="text-xs text-gray-900 font-semibold">{deviceData.nextServiceDue}</span>
+                  <span className="text-sm text-gray-600">Next Service Due</span>
+                  <span className="text-sm text-gray-900 font-semibold">{deviceData.nextServiceDue}</span>
                 </div>
 
                 {/* Warranty Status */}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600">Warranty Status</span>
-                  <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px] px-1.5 py-0">
+                  <span className="text-sm text-gray-600">Warranty Status</span>
+                  <Badge className="bg-green-100 text-green-700 border-green-300 text-xs px-1.5 py-0">
                     {deviceData.warrantyStatus}
                   </Badge>
                 </div>
               </div>
             </CardContent>
           </Card>
+        </div>
+        <div className="lg:col-span-3 flex">
+          <div className="w-full">
+            <ChartAreaInteractive
+              title="Temperature and Humidity"
+              showParameterSelect={true}
+              defaultParameter="temperature"
+              allowedParameters={["temperature", "humidity"]}
+              data={historyData}
+              timeRange={timeRange}
+              onTimeRangeChange={setTimeRange}
+            />
+          </div>
         </div>
       </div>
     </div>

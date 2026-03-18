@@ -60,6 +60,7 @@ interface ChartAreaInteractiveProps {
   title?: string
   showParameterSelect?: boolean
   defaultParameter?: "voltage" | "current" | "power" | "temperature" | "humidity"
+  allowedParameters?: ("voltage" | "current" | "power" | "temperature" | "humidity")[]
   data: any[]
   timeRange: string
   onTimeRangeChange: (range: string) => void
@@ -69,6 +70,7 @@ export function ChartAreaInteractive({
   title = "Electrical Parameters",
   showParameterSelect = true,
   defaultParameter = "voltage",
+  allowedParameters = ["voltage", "current", "power", "temperature", "humidity"],
   data,
   timeRange,
   onTimeRangeChange
@@ -92,22 +94,21 @@ export function ChartAreaInteractive({
                 <SelectValue placeholder="Select parameter" />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
-                <SelectItem value="voltage" className="rounded-lg">
-                  Voltage
-                </SelectItem>
-                <SelectItem value="current" className="rounded-lg">
-                  Current
-                </SelectItem>
-                <SelectItem value="power" className="rounded-lg">
-                  Power Consumption
-                </SelectItem>
-                <SelectItem value="temperature" className="rounded-lg">
-                  Temperature
-                </SelectItem>
-                <SelectItem value="humidity" className="rounded-lg">
-                  Humidity
-                </SelectItem>
-
+                {allowedParameters.includes("voltage") && (
+                  <SelectItem value="voltage" className="rounded-lg">Voltage</SelectItem>
+                )}
+                {allowedParameters.includes("current") && (
+                  <SelectItem value="current" className="rounded-lg">Current</SelectItem>
+                )}
+                {allowedParameters.includes("power") && (
+                  <SelectItem value="power" className="rounded-lg">Power Consumption</SelectItem>
+                )}
+                {allowedParameters.includes("temperature") && (
+                  <SelectItem value="temperature" className="rounded-lg">Temperature</SelectItem>
+                )}
+                {allowedParameters.includes("humidity") && (
+                  <SelectItem value="humidity" className="rounded-lg">Humidity</SelectItem>
+                )}
               </SelectContent>
             </Select>
           )}
