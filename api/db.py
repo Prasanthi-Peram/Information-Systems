@@ -454,12 +454,9 @@ def get_dashboard_stats():
                 (SELECT AVG(health_score) FROM latest_predictions WHERE predicted_state = 1) as avg_health,
                 (SELECT AVG(real_power) FROM latest_telemetry t JOIN latest_predictions p ON t.device_id = p.device_id WHERE p.predicted_state = 1) as avg_power,
                 (
-                    -- Unassigned or Rejected alerts
-                    (SELECT COUNT(*) FROM alerts a WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%'
-                     AND NOT EXISTS (SELECT 1 FROM maintenance_assignments ma WHERE ma.alert_id = a.alert_id AND ma.status IN ('Pending', 'Accepted', 'Completed')))
-                    +
-                    -- Assigned but not yet completed
-                    (SELECT COUNT(*) FROM maintenance_assignments WHERE status IN ('Pending', 'Accepted'))
+                    SELECT COUNT(*) FROM alerts 
+                    WHERE resolved_at IS NULL 
+                      AND alert_text LIKE 'Telemetry anomaly%%'
                 ) as maintenance_tasks;
             """
         )
@@ -1252,26 +1249,31 @@ def get_maintenance_stats():
         cur.execute(
             """
             SELECT
+                -- 1. Pending: Alerts with NO assignments at all
                 (
-                    SELECT COUNT(*) FROM alerts
-                    WHERE resolved_at IS NULL
-                      AND alert_text LIKE 'Telemetry anomaly%%'
-                      AND NOT EXISTS (
-                          SELECT 1 FROM maintenance_assignments ma
-                          WHERE ma.alert_id = alerts.alert_id
-                      )
+                    SELECT COUNT(*) FROM alerts a
+                    WHERE a.resolved_at IS NULL
+                      AND a.alert_text LIKE 'Telemetry anomaly%%'
+                      AND NOT EXISTS (SELECT 1 FROM maintenance_assignments ma WHERE ma.alert_id = a.alert_id)
                 ) AS pending,
+                -- 2. Assigned: Alerts with at least one 'Pending' assignment (and no 'Accepted')
                 (
-                    SELECT COUNT(*) FROM maintenance_assignments
-                    WHERE status = 'Pending'
+                    SELECT COUNT(DISTINCT alert_id) FROM maintenance_assignments ma
+                    WHERE ma.status = 'Pending'
+                      AND NOT EXISTS (SELECT 1 FROM maintenance_assignments ma2 WHERE ma2.alert_id = ma.alert_id AND ma2.status = 'Accepted')
                 ) AS assigned,
+                -- 3. Ongoing: Alerts with at least one 'Accepted' assignment
                 (
-                    SELECT COUNT(*) FROM maintenance_assignments
-                    WHERE status = 'Accepted'
+                    SELECT COUNT(DISTINCT alert_id) FROM maintenance_assignments ma
+                    WHERE ma.status = 'Accepted'
                 ) AS ongoing,
+                -- 4. Rejected: Alerts with ONLY 'Rejected' assignments
                 (
-                    SELECT COUNT(*) FROM maintenance_assignments
-                    WHERE status = 'Rejected'
+                    SELECT COUNT(DISTINCT a.alert_id) FROM alerts a
+                    WHERE a.resolved_at IS NULL
+                      AND a.alert_text LIKE 'Telemetry anomaly%%'
+                      AND EXISTS (SELECT 1 FROM maintenance_assignments ma WHERE ma.alert_id = a.alert_id AND ma.status = 'Rejected')
+                      AND NOT EXISTS (SELECT 1 FROM maintenance_assignments ma2 WHERE ma2.alert_id = a.alert_id AND ma2.status IN ('Pending', 'Accepted', 'Completed'))
                 ) AS rejected
             """
         )
@@ -1281,12 +1283,17 @@ def get_maintenance_stats():
         assigned = int(assigned or 0)
         ongoing = int(ongoing or 0)
         rejected = int(rejected or 0)
+        
+        # Total is simply the count of all unique unresolved alerts
+        cur.execute("SELECT COUNT(*) FROM alerts WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%'")
+        total = cur.fetchone()[0]
+        
         return {
             "pending": pending,
             "assigned": assigned,
             "ongoing": ongoing,
             "rejected": rejected,
-            "total": pending + assigned + ongoing,
+            "total": total,
         }
 
 

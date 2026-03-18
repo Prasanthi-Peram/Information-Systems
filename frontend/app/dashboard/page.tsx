@@ -521,19 +521,20 @@ export default function DashboardPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* False Alarm Confirmation Dialog */}
       <AlertDialog open={!!showDeleteDialog} onOpenChange={() => setShowDeleteDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Resolve Alert?</AlertDialogTitle>
+            <AlertDialogTitle>Mark as False Alarm?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark the alert as resolved and remove it from the maintenance list.
+              This will mark the alert as a false alarm and remove it from the maintenance list.
+              Model retraining is automatically triggered every 10 false alarms to improve accuracy.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => confirmDelete(showDeleteDialog!)} className="bg-red-600 hover:bg-red-700">
-              Resolve
+              Mark False
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
