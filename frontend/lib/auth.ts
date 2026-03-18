@@ -92,7 +92,9 @@ export async function createUser(
   password: string,
   username: string,
   role: string,
-  campusId: string | null = null
+  campusId: string | null = null,
+  specialization: string | null = null,
+  phone: string | null = null
 ): Promise<{ id: string; email: string } | null> {
   try {
     const hashedPassword = await hashPassword(password)
@@ -111,6 +113,8 @@ export async function createUser(
         name: username,
         role,
         campus_id: campusId,
+        specialization,
+        phone,
         created_at: nowIso,
       }),
     })
@@ -170,10 +174,10 @@ export async function shouldRefreshToken(token: string): Promise<boolean> {
 }
 
 // Create a session using JWT
-export async function createSession(userId: string) {
+export async function createSession(userId: string, role: string) {
   try {
     // Create JWT with user data
-    const token = await generateJWT({ userId })
+    const token = await generateJWT({ userId, role })
 
     // Store JWT in a cookie
     const cookieStore = await cookies()
@@ -203,7 +207,7 @@ export const getSession = cache(async () => {
     if (!token) return null
     const payload = await verifyJWT(token)
 
-    return payload ? { userId: payload.userId } : null
+    return payload ? { userId: payload.userId as string, role: payload.role as string } : null
   } catch (error) {
     // Handle the specific prerendering error
     if (

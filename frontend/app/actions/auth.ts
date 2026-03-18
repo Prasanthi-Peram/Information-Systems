@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
-import { getUserByEmail, verifyPassword, createSession, createUser, deleteSession } from '@/lib/auth'
+import { getUserByEmail, verifyPassword, createSession, createUser, deleteSession, getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 
 // Zod schema for signin validation
@@ -36,6 +36,8 @@ const SignUpSchema = z
       message: 'Please select a role',
     }),
     campusId: z.string().optional(),
+    specialization: z.string().optional(),
+    phone: z.string().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
@@ -51,6 +53,26 @@ const SignUpSchema = z
     message: 'Campus ID is required for administrators',
     path: ['campusId'],
   })
+  .refine((data) => {
+    // Specialization is required for technicians
+    if (data.role === 'technician') {
+      return data.specialization && data.specialization.trim().length > 0
+    }
+    return true
+  }, {
+    message: 'Specialization is required for technicians',
+    path: ['specialization'],
+  })
+  .refine((data) => {
+    // Phone is required for technicians
+    if (data.role === 'technician') {
+      return data.phone && data.phone.trim().length > 0
+    }
+    return true
+  }, {
+    message: 'Phone number is required for technicians',
+    path: ['phone'],
+  })
 
 export type SignInData = z.infer<typeof SignInSchema>
 export type SignUpData = z.infer<typeof SignUpSchema>
@@ -60,6 +82,7 @@ export type ActionResponse = {
   message: string
   errors?: Record<string, string[]>
   error?: string
+  role?: string
 }
 
 // Sign In function
@@ -69,7 +92,7 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
       role: formData.get('role') as string,
-      campusId: formData.get('campusId') as string | undefined,
+      campusId: (formData.get('campusId') as string) || undefined,
     }
 
     // Validate input using Zod
@@ -130,7 +153,7 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
     }
 
     // Create session
-    const sessionCreated = await createSession(user.id)
+    const sessionCreated = await createSession(user.id, user.role)
     if (!sessionCreated) {
       console.error('Failed to create session for user:', user.id)
       return {
@@ -143,6 +166,7 @@ export async function signIn(formData: FormData): Promise<ActionResponse> {
     return {
       success: true,
       message: 'Signed in successfully',
+      role: user.role,
     }
   } catch (error) {
     console.error('Sign in error:', error)
@@ -164,7 +188,9 @@ export async function signUp(formData: FormData): Promise<ActionResponse> {
       confirmPassword: formData.get('confirmPassword') as string,
       username: formData.get('username') as string,
       role: formData.get('role') as string,
-      campusId: formData.get('campusId') as string | undefined,
+      campusId: (formData.get('campusId') as string) || undefined,
+      specialization: (formData.get('specialization') as string) || undefined,
+      phone: (formData.get('phone') as string) || undefined,
     }
 
     // Validate input using Zod
@@ -193,7 +219,9 @@ export async function signUp(formData: FormData): Promise<ActionResponse> {
       data.password,
       data.username,
       data.role,
-      data.campusId || null
+      data.campusId || null,
+      data.specialization || null,
+      data.phone || null
     )
     if (!user) {
       return {
@@ -229,6 +257,12 @@ export async function signOut(): Promise<void> {
   } finally {
     redirect('/') // Redirect to landing page after signing out
   }
+}
+
+// Get current user ID from session
+export async function getUserId(): Promise<string | null> {
+  const session = await getSession()
+  return session?.userId || null
 }
 
 // Client-side sign out action for use in client components

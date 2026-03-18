@@ -50,7 +50,7 @@ function SignInForm() {
         toast.success('Signed in successfully')
         // Use smooth client-side navigation instead of full page reload
         setTimeout(() => {
-          router.push('/dashboard')
+          router.push(result.role === 'technician' ? '/technician' : '/dashboard')
         }, 500)
         return result
       }

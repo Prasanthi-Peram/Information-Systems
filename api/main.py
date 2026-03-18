@@ -24,7 +24,19 @@ from db import (
     get_user_by_email,
     insert_user,
     get_false_alert_count,
-    get_total_false_alert_count
+    get_total_false_alert_count,
+    get_technician_by_user_id,
+    get_technician_stats,
+    get_technician_tasks,
+    update_assignment_status,
+    get_all_technicians,
+    assign_task,
+    update_technician_profile,
+    get_technician_performance_metrics,
+    get_assigned_tasks,
+    get_completed_tasks_admin,
+    get_maintenance_stats,
+    reassign_task
 )
 from ml_utils import load_all_models, run_prediction
 
@@ -68,12 +80,20 @@ class UserCreate(BaseModel):
     name: str
     role: str
     campus_id: str | None = None
+    specialization: str | None = None
+    phone: str | None = None
     created_at: str
 
 
 class FalseAlertFeedback(BaseModel):
     # For now we don't need device_id to count; reserved for future
     device_id: str | None = None
+
+
+class TechnicianProfileUpdate(BaseModel):
+    name: str
+    specialization: str
+    phone: str
 
 app = FastAPI(lifespan=lifespan)
 
@@ -127,6 +147,14 @@ async def alerts(limit: int = 20):
 @app.get("/maintenance/tasks")
 async def maintenance_tasks():
     return get_maintenance_tasks()
+
+@app.get("/maintenance/assigned-tasks")
+async def get_admin_assigned_tasks():
+    return get_assigned_tasks()
+
+@app.get("/maintenance/completed-tasks")
+async def get_admin_completed_tasks():
+    return get_completed_tasks_admin()
 
 
 @app.websocket("/ws")
@@ -294,3 +322,75 @@ async def false_alert_feedback(payload: FalseAlertFeedback):
         "total_false_alerts": total_false_count,
         "retrain_started": should_retrain,
     }
+@app.get("/technician/stats/{user_id}")
+async def api_get_technician_stats(user_id: str):
+    tech = get_technician_by_user_id(user_id)
+    if not tech:
+        return {"assigned_acs": 0, "pending": 0, "accepted": 0, "rejected": 0}
+    return get_technician_stats(tech["technician_id"])
+
+@app.get("/technician/metrics/{user_id}")
+async def api_get_technician_metrics(user_id: str):
+    tech = get_technician_by_user_id(user_id)
+    if not tech:
+        raise HTTPException(status_code=404, detail="Technician not found")
+    return get_technician_performance_metrics(tech["technician_id"])
+
+@app.get("/technician/profile/{user_id}")
+async def api_get_technician_profile(user_id: str):
+    tech = get_technician_by_user_id(user_id)
+    if not tech:
+        raise HTTPException(status_code=404, detail="Technician not found")
+    return tech
+
+@app.get("/technician/tasks/{user_id}")
+async def api_get_technician_tasks(user_id: str):
+    tech = get_technician_by_user_id(user_id)
+    if not tech:
+        return []
+    return get_technician_tasks(tech["technician_id"])
+
+@app.post("/technician/assignment/{assignment_id}/status")
+async def api_update_assignment_status(assignment_id: int, status: str):
+    update_assignment_status(assignment_id, status)
+    return {"status": "success"}
+
+@app.post("/technician/profile/{user_id}")
+async def api_update_technician_profile(user_id: str, payload: TechnicianProfileUpdate):
+    try:
+        update_technician_profile(user_id, payload.name, payload.specialization, payload.phone)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/technicians")
+async def api_get_all_technicians():
+    return get_all_technicians()
+
+class TaskAssignment(BaseModel):
+    alert_id: int
+    technician_id: int
+
+class TaskReassignment(BaseModel):
+    assignment_id: int
+    technician_id: int
+
+@app.get("/maintenance/stats")
+async def api_maintenance_stats():
+    return get_maintenance_stats()
+
+@app.post("/maintenance/assign")
+async def api_assign_task(payload: TaskAssignment):
+    try:
+        assignment_id = assign_task(payload.alert_id, payload.technician_id)
+        return {"status": "success", "assignment_id": assignment_id}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/maintenance/reassign")
+async def api_reassign_task(payload: TaskReassignment):
+    try:
+        new_assignment_id = reassign_task(payload.assignment_id, payload.technician_id)
+        return {"status": "success", "assignment_id": new_assignment_id}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

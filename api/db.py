@@ -220,14 +220,13 @@ def insert_alert(device_id, time_stamp, alert):
             """
             SELECT 1 FROM alerts 
             WHERE device_id = %s 
-              AND alert_text = %s 
               AND time_stamp = %s
             LIMIT 1
             """,
-            (device_id, alert["text"], time_stamp)
+            (device_id, time_stamp)
         )
         if cur.fetchone():
-            return  # Skip insertion if this exact alert already exists for this timestamp
+            return  # Skip insertion if any alert already exists for this timestamp
 
         # Calculate predicted_service_date based on criticality
         # Critical: 3 days, Warning: 7 days, others: 14 days
@@ -312,8 +311,14 @@ def get_alerts(limit: int = 20):
         cur.execute(
             """
             SELECT alert_id, time_stamp, device_id, alert_text, alert_criticality, recommendation, created_at
-            FROM alerts
-            WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%'
+            FROM alerts a
+            WHERE resolved_at IS NULL 
+              AND alert_text LIKE 'Telemetry anomaly%%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM maintenance_assignments ma 
+                  WHERE ma.alert_id = a.alert_id
+                    AND ma.status IN ('Pending', 'Accepted', 'Completed')
+              )
             ORDER BY time_stamp DESC
             LIMIT %s;
             """,
@@ -362,7 +367,67 @@ def get_maintenance_tasks():
             FROM alerts a
             WHERE resolved_at IS NULL
               AND alert_text LIKE 'Telemetry anomaly%%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM maintenance_assignments ma 
+                  WHERE ma.alert_id = a.alert_id
+                    AND ma.status IN ('Pending', 'Accepted', 'Completed')
+              )
             ORDER BY time_stamp DESC
+            """,
+        )
+        columns = [desc[0] for desc in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+def get_assigned_tasks():
+    """Fetch all currently assigned (Pending/Accepted) tasks for admin view."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                ma.assignment_id,
+                a.device_id as "deviceId",
+                (SELECT location_name FROM live_location l JOIN live_ac_device d ON l.location_id = d.location_id WHERE d.device_id = a.device_id) as room,
+                (SELECT TO_CHAR(last_service, 'YYYY-MM-DD') FROM live_ac_device d WHERE d.device_id = a.device_id) as "lastService",
+                TO_CHAR(a.predicted_service_date, 'YYYY-MM-DD') as "nextService",
+                a.alert_text as issue,
+                a.alert_criticality as criticality,
+                ma.status,
+                u.name as "technicianName",
+                t.specialization
+            FROM maintenance_assignments ma
+            JOIN alerts a ON ma.alert_id = a.alert_id
+            JOIN technicians t ON ma.technician_id = t.technician_id
+            JOIN users u ON t.user_id = u.id
+            WHERE ma.status IN ('Pending', 'Accepted', 'Rejected')
+            ORDER BY ma.assigned_at DESC
+            """,
+        )
+        columns = [desc[0] for desc in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+def get_completed_tasks_admin():
+    """Fetch all completed tasks for admin view."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                ma.assignment_id,
+                a.device_id as "deviceId",
+                (SELECT location_name FROM live_location l JOIN live_ac_device d ON l.location_id = d.location_id WHERE d.device_id = a.device_id) as room,
+                (SELECT TO_CHAR(last_service, 'YYYY-MM-DD') FROM live_ac_device d WHERE d.device_id = a.device_id) as "lastService",
+                TO_CHAR(a.predicted_service_date, 'YYYY-MM-DD') as "nextService",
+                a.alert_text as issue,
+                a.alert_criticality as criticality,
+                ma.status,
+                u.name as "technicianName",
+                t.specialization,
+                TO_CHAR(ma.updated_at, 'YYYY-MM-DD') as "completedAt"
+            FROM maintenance_assignments ma
+            JOIN alerts a ON ma.alert_id = a.alert_id
+            JOIN technicians t ON ma.technician_id = t.technician_id
+            JOIN users u ON t.user_id = u.id
+            WHERE ma.status = 'Completed'
+            ORDER BY ma.updated_at DESC
             """,
         )
         columns = [desc[0] for desc in cur.description]
@@ -388,7 +453,14 @@ def get_dashboard_stats():
                 (SELECT AVG(performance_score) FROM latest_predictions WHERE predicted_state = 1) as avg_performance,
                 (SELECT AVG(health_score) FROM latest_predictions WHERE predicted_state = 1) as avg_health,
                 (SELECT AVG(real_power) FROM latest_telemetry t JOIN latest_predictions p ON t.device_id = p.device_id WHERE p.predicted_state = 1) as avg_power,
-                (SELECT COUNT(*) FROM alerts WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%') as maintenance_tasks;
+                (
+                    -- Unassigned or Rejected alerts
+                    (SELECT COUNT(*) FROM alerts a WHERE resolved_at IS NULL AND alert_text LIKE 'Telemetry anomaly%%'
+                     AND NOT EXISTS (SELECT 1 FROM maintenance_assignments ma WHERE ma.alert_id = a.alert_id AND ma.status IN ('Pending', 'Accepted', 'Completed')))
+                    +
+                    -- Assigned but not yet completed
+                    (SELECT COUNT(*) FROM maintenance_assignments WHERE status IN ('Pending', 'Accepted'))
+                ) as maintenance_tasks;
             """
         )
 
@@ -967,6 +1039,7 @@ def insert_user(user: dict):
     """
     Insert a user record.
     Expects keys: id, email, password, name, role, campus_id, created_at.
+    If role is 'technician', also creates a record in technicians table.
     Password should already be hashed by the caller.
     """
     with get_db_cursor() as cur:
@@ -980,4 +1053,287 @@ def insert_user(user: dict):
         )
         row = cur.fetchone()
         columns = [desc[0] for desc in cur.description]
+        
+        # If user is a technician, create a record in the technicians table
+        if user.get('role') == 'technician':
+            cur.execute(
+                """
+                INSERT INTO technicians (user_id, specialization, phone, is_available)
+                VALUES (%s, %s, %s, TRUE)
+                ON CONFLICT DO NOTHING;
+                """,
+                (user['id'], user.get('specialization'), user.get('phone'))
+            )
+            
         return dict(zip(columns, row))
+
+def get_technician_by_user_id(user_id: str):
+    """Fetch technician details by user ID, including user info."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.technician_id, t.user_id, t.specialization, t.phone, t.is_available, u.name, u.email
+            FROM technicians t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = %s
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))
+
+def update_technician_profile(user_id: str, name: str, specialization: str, phone: str):
+    """Update technician profile in both users and technicians tables."""
+    with get_db_cursor() as cur:
+        # Update users table
+        cur.execute(
+            "UPDATE users SET name = %s WHERE id = %s",
+            (name, user_id)
+        )
+        # Update technicians table
+        cur.execute(
+            "UPDATE technicians SET specialization = %s, phone = %s WHERE user_id = %s",
+            (specialization, phone, user_id)
+        )
+
+def get_technician_stats(technician_id: int):
+    """Fetch stats for a specific technician."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                (SELECT COUNT(*) FROM maintenance_assignments WHERE technician_id = %s) as assigned_acs,
+                (SELECT COUNT(*) FROM maintenance_assignments WHERE technician_id = %s AND status = 'Pending') as pending,
+                (SELECT COUNT(*) FROM maintenance_assignments WHERE technician_id = %s AND status = 'Accepted') as accepted,
+                (SELECT COUNT(*) FROM maintenance_assignments WHERE technician_id = %s AND status = 'Rejected') as rejected
+            """,
+            (technician_id, technician_id, technician_id, technician_id),
+        )
+        row = cur.fetchone()
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))
+
+def get_technician_tasks(technician_id: int):
+    """Fetch assigned tasks for a specific technician."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                ma.assignment_id,
+                a.device_id as "acName",
+                (SELECT location_name FROM live_location l JOIN live_ac_device d ON l.location_id = d.location_id WHERE d.device_id = a.device_id) as location,
+                a.alert_text as condition,
+                a.alert_criticality as severity,
+                ma.status
+            FROM maintenance_assignments ma
+            JOIN alerts a ON ma.alert_id = a.alert_id
+            WHERE ma.technician_id = %s
+            ORDER BY ma.assigned_at DESC
+            """,
+            (technician_id,),
+        )
+        columns = [desc[0] for desc in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+def update_assignment_status(assignment_id: int, status: str):
+    """Update the status of a maintenance assignment."""
+    with get_db_cursor() as cur:
+        if status == 'Accepted':
+            cur.execute(
+                """
+                UPDATE maintenance_assignments
+                SET status = %s, updated_at = now(), accepted_at = now()
+                WHERE assignment_id = %s
+                """,
+                (status, assignment_id),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE maintenance_assignments
+                SET status = %s, updated_at = now()
+                WHERE assignment_id = %s
+                """,
+                (status, assignment_id),
+            )
+
+def assign_task(alert_id: int, technician_id: int):
+    """Assign an alert to a technician."""
+    with get_db_cursor() as cur:
+        # Fetch technician details to store in assignment
+        cur.execute(
+            """
+            SELECT u.name, t.specialization
+            FROM technicians t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.technician_id = %s
+            """,
+            (technician_id,)
+        )
+        tech_row = cur.fetchone()
+        tech_name = tech_row[0] if tech_row else None
+        specialization = tech_row[1] if tech_row else None
+
+        cur.execute(
+            """
+            INSERT INTO maintenance_assignments (alert_id, technician_id, technician_name, specialization, status)
+            VALUES (%s, %s, %s, %s, 'Pending')
+            RETURNING assignment_id;
+            """,
+            (alert_id, technician_id, tech_name, specialization),
+        )
+        return cur.fetchone()[0]
+
+def create_technician(user_id: str, specialization: str, phone: str):
+    """Create a new technician record."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO technicians (user_id, specialization, phone)
+            VALUES (%s, %s, %s)
+            RETURNING technician_id;
+            """,
+            (user_id, specialization, phone),
+        )
+        return cur.fetchone()[0]
+
+def get_all_technicians():
+    """Fetch all technicians with their user details."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT t.technician_id, t.user_id, t.specialization, t.phone, t.is_available, u.name
+            FROM technicians t
+            JOIN users u ON t.user_id = u.id
+            ORDER BY u.name ASC
+            """
+        )
+        columns = [desc[0] for desc in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+def get_technician_performance_metrics(technician_id: int):
+    """Fetch performance metrics for a specific technician."""
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT 
+                COUNT(*) as total_completed,
+                COALESCE(SUM(
+                    CASE WHEN accepted_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (updated_at - accepted_at))/3600
+                    ELSE EXTRACT(EPOCH FROM (updated_at - assigned_at))/3600
+                    END
+                ), 0) as total_hours,
+                COALESCE(AVG(
+                    CASE WHEN accepted_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (updated_at - accepted_at))/3600
+                    ELSE EXTRACT(EPOCH FROM (updated_at - assigned_at))/3600
+                    END
+                ), 0) as avg_hours_per_task
+            FROM maintenance_assignments
+            WHERE technician_id = %s AND status = 'Completed'
+            """,
+            (technician_id,),
+        )
+        row = cur.fetchone()
+        columns = [desc[0] for desc in cur.description]
+        return dict(zip(columns, row))
+
+
+def get_maintenance_stats():
+    """
+    Return pending (unassigned alerts) + assigned (Pending) + ongoing (Accepted) = total.
+    Everything comes from the DB — no frontend computation.
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                (
+                    SELECT COUNT(*) FROM alerts
+                    WHERE resolved_at IS NULL
+                      AND alert_text LIKE 'Telemetry anomaly%%'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM maintenance_assignments ma
+                          WHERE ma.alert_id = alerts.alert_id
+                      )
+                ) AS pending,
+                (
+                    SELECT COUNT(*) FROM maintenance_assignments
+                    WHERE status = 'Pending'
+                ) AS assigned,
+                (
+                    SELECT COUNT(*) FROM maintenance_assignments
+                    WHERE status = 'Accepted'
+                ) AS ongoing,
+                (
+                    SELECT COUNT(*) FROM maintenance_assignments
+                    WHERE status = 'Rejected'
+                ) AS rejected
+            """
+        )
+        row = cur.fetchone()
+        pending, assigned, ongoing, rejected = row if row else (0, 0, 0, 0)
+        pending = int(pending or 0)
+        assigned = int(assigned or 0)
+        ongoing = int(ongoing or 0)
+        rejected = int(rejected or 0)
+        return {
+            "pending": pending,
+            "assigned": assigned,
+            "ongoing": ongoing,
+            "rejected": rejected,
+            "total": pending + assigned + ongoing,
+        }
+
+
+def reassign_task(assignment_id: int, technician_id: int):
+    """
+    Reassign a rejected task to a (potentially different) technician.
+    Marks the existing assignment as Rejected (if not already) and creates a
+    fresh Pending assignment for the same alert.
+    """
+    with get_db_cursor() as cur:
+        # Get the alert_id from the existing assignment
+        cur.execute(
+            "SELECT alert_id FROM maintenance_assignments WHERE assignment_id = %s",
+            (assignment_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"Assignment {assignment_id} not found")
+        alert_id = row[0]
+
+        # Mark the old assignment as Rejected
+        cur.execute(
+            "UPDATE maintenance_assignments SET status = 'Rejected', updated_at = now() WHERE assignment_id = %s",
+            (assignment_id,),
+        )
+
+        # Fetch the technician details
+        cur.execute(
+            """
+            SELECT u.name, t.specialization
+            FROM technicians t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.technician_id = %s
+            """,
+            (technician_id,),
+        )
+        tech_row = cur.fetchone()
+        tech_name = tech_row[0] if tech_row else None
+        specialization = tech_row[1] if tech_row else None
+
+        # Create a new Pending assignment
+        cur.execute(
+            """
+            INSERT INTO maintenance_assignments (alert_id, technician_id, technician_name, specialization, status)
+            VALUES (%s, %s, %s, %s, 'Pending')
+            RETURNING assignment_id;
+            """,
+            (alert_id, technician_id, tech_name, specialization),
+        )
+        return cur.fetchone()[0]

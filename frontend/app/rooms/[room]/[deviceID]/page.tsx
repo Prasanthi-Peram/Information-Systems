@@ -30,7 +30,7 @@ interface DevicePageProps {
   }>
 }
 
-export function DeviceReport({ room, deviceID }: { room: string; deviceID: string }) {
+function DeviceReport({ room, deviceID }: { room: string; deviceID: string }) {
   const [deviceData, setDeviceData] = useState<DeviceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [historyData, setHistoryData] = useState<any[]>([])

@@ -104,3 +104,23 @@ CREATE TABLE IF NOT EXISTS live_ml_predictions (
     performance_score   DOUBLE PRECISION,
     model_version       TEXT
 );
+CREATE TABLE IF NOT EXISTS technicians (
+    technician_id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    specialization TEXT,
+    phone TEXT,
+    is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_assignments (
+    assignment_id SERIAL PRIMARY KEY,
+    alert_id BIGINT REFERENCES alerts(alert_id) ON DELETE CASCADE,
+    technician_id INT REFERENCES technicians(technician_id) ON DELETE CASCADE,
+    technician_name TEXT,
+    specialization TEXT,
+    status TEXT CHECK (status IN ('Pending', 'Accepted', 'Rejected', 'Completed')) DEFAULT 'Pending',
+    assigned_at TIMESTAMPTZ DEFAULT now(),
+    accepted_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);

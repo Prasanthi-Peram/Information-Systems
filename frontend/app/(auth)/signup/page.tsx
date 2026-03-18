@@ -145,7 +145,7 @@ function SignUpForm() {
             </FormGroup>
 
             <FormGroup>
-              <FormLabel className="font-mono" htmlFor="username">Username</FormLabel>
+              <FormLabel className="font-mono" htmlFor="username">Full Name</FormLabel>
               <FormInput
                 id="username"
                 name="username"
@@ -154,6 +154,7 @@ function SignUpForm() {
                 disabled={isPending}
                 aria-describedby="username-error"
                 className={["font-mono", state?.errors?.username ? 'border-red-500' : ''].join(" ")}
+                placeholder="Enter your full name"
               />
               {state?.errors?.username && (
                 <p id="username-error" className="text-sm text-red-500">
@@ -161,6 +162,48 @@ function SignUpForm() {
                 </p>
               )}
             </FormGroup>
+
+            {!isAdministrator && (
+              <>
+                <FormGroup>
+                  <FormLabel className="font-mono" htmlFor="specialization">Specialization</FormLabel>
+                  <FormInput
+                    id="specialization"
+                    name="specialization"
+                    type="text"
+                    required
+                    disabled={isPending}
+                    aria-describedby="specialization-error"
+                    className={["font-mono", state?.errors?.specialization ? 'border-red-500' : ''].join(" ")}
+                    placeholder="e.g., HVAC, Electrical"
+                  />
+                  {state?.errors?.specialization && (
+                    <p id="specialization-error" className="text-sm text-red-500">
+                      {state.errors.specialization[0]}
+                    </p>
+                  )}
+                </FormGroup>
+
+                <FormGroup>
+                  <FormLabel className="font-mono" htmlFor="phone">Phone Number</FormLabel>
+                  <FormInput
+                    id="phone"
+                    name="phone"
+                    type="text"
+                    required
+                    disabled={isPending}
+                    aria-describedby="phone-error"
+                    className={["font-mono", state?.errors?.phone ? 'border-red-500' : ''].join(" ")}
+                    placeholder="Enter your phone number"
+                  />
+                  {state?.errors?.phone && (
+                    <p id="phone-error" className="text-sm text-red-500">
+                      {state.errors.phone[0]}
+                    </p>
+                  )}
+                </FormGroup>
+              </>
+            )}
 
             <FormGroup>
               <FormLabel className="font-mono" htmlFor="password">Password</FormLabel>

@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
 import {
@@ -12,11 +11,21 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/Table'
-import { UserCheck, Calendar, Users, FileDown, ArrowLeft, Download } from 'lucide-react'
+import { UserCheck, Users, FileDown, ArrowLeft, RefreshCw, FileText, ClipboardList, Activity, AlertTriangle, CheckCircle2, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
-import { downloadPdfReport } from '@/lib/pdf-utils'
-import { getMockDeviceData, exportDeviceReport, DeviceData } from '@/lib/device-utils'
+import { Input } from '@/components/ui/Input'
+import { Checkbox } from '@/components/ui/Checkbox'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/Alert-dialog'
 
 interface MaintenanceRecord {
   id: string
@@ -25,10 +34,13 @@ interface MaintenanceRecord {
   lastService: string
   nextService: string
   issue: string
-  criticality: 'Low' | 'Medium' | 'High'
-  scheduled?: boolean
+  criticality: 'Low' | 'Medium' | 'High' | 'Critical'
   technician?: string
   timeStamp?: string
+  status?: string
+  assignment_id?: number
+  technicianName?: string
+  specialization?: string
 }
 
 interface Technician {
@@ -40,311 +52,179 @@ interface Technician {
   email?: string
 }
 
-const technicians: Technician[] = [
-  { id: 'tech1', name: 'John Smith', specialization: 'HVAC', available: true, phone: '000-000-0000', email: 'john@example.com' },
-  { id: 'tech2', name: 'Sarah Johnson', specialization: 'Refrigeration', available: true, phone: '000-000-0000', email: 'sarah@example.com' },
-  { id: 'tech3', name: 'Mike Wilson', specialization: 'Electrical', available: true, phone: '000-000-0000', email: 'mike@example.com' },
-  { id: 'tech4', name: 'Emily Davis', specialization: 'General Maintenance', available: false, phone: '000-000-0000', email: 'emily@example.com' },
-  { id: 'tech5', name: 'Robert Brown', specialization: 'HVAC', available: true, phone: '000-000-0000', email: 'robert@example.com' },
-  { id: 'tech6', name: 'Lisa Chen', specialization: 'Controls', available: true, phone: '000-000-0000', email: 'lisa@example.com' },
-]
+interface CompletedTask {
+  assignment_id: number
+  deviceId: string
+  room: string
+  issue: string
+  criticality: string
+  technicianName: string
+  completedAt: string
+}
 
-const initialItems: MaintenanceRecord[] = [
-  {
-    id: '1',
-    deviceId: 'AC-001',
-    room: 'Conference Room A',
-    lastService: '2024-01-15',
-    nextService: '2024-07-15',
-    issue: 'Filter cleaning required',
-    criticality: 'Low'
-  },
-  {
-    id: '2',
-    deviceId: 'AC-002',
-    room: 'Office 201',
-    lastService: '2024-02-20',
-    nextService: '2024-08-20',
-    issue: 'None',
-    criticality: 'Low'
-  },
-  {
-    id: '3',
-    deviceId: 'AC-003',
-    room: 'Lobby',
-    lastService: '2023-12-10',
-    nextService: '2024-06-10',
-    issue: 'Refrigerant level check needed',
-    criticality: 'Medium'
-  },
-  {
-    id: '4',
-    deviceId: 'AC-004',
-    room: 'Server Room',
-    lastService: '2024-03-05',
-    nextService: '2024-09-05',
-    issue: 'None',
-    criticality: 'Low'
-  },
-  {
-    id: '5',
-    deviceId: 'AC-005',
-    room: 'Office 305',
-    lastService: '2023-11-18',
-    nextService: '2024-05-18',
-    issue: 'Compressor noise detected',
-    criticality: 'High'
-  },
-  {
-    id: '6',
-    deviceId: 'AC-006',
-    room: 'Cafeteria',
-    lastService: '2024-01-30',
-    nextService: '2024-07-30',
-    issue: 'Drainage system check',
-    criticality: 'Medium'
-  },
-  {
-    id: '7',
-    deviceId: 'AC-007',
-    room: 'Office 102',
-    lastService: '2024-02-12',
-    nextService: '2024-08-12',
-    issue: 'None',
-    criticality: 'Low'
-  }
-]
+interface MaintenanceStats {
+  pending: number
+  assigned: number
+  ongoing: number
+  rejected: number
+  total: number
+}
 
 export default function MaintenancePage() {
   const router = useRouter()
-  const [items, setItems] = useState<MaintenanceRecord[]>([])
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set())
-  const [assignedItems, setAssignedItems] = useState<MaintenanceRecord[]>([])
+  const [pendingTasks, setPendingTasks] = useState<MaintenanceRecord[]>([])
+  const [assignedTasks, setAssignedTasks] = useState<MaintenanceRecord[]>([])
+  const [completedTasks, setCompletedTasks] = useState<CompletedTask[]>([])
+  const [stats, setStats] = useState<MaintenanceStats>({ pending: 0, assigned: 0, ongoing: 0, rejected: 0, total: 0 })
+  const [loading, setLoading] = useState(true)
+
   const [showTechnicianDialog, setShowTechnicianDialog] = useState<string | null>(null)
+  const [reassigningAssignmentId, setReassigningAssignmentId] = useState<number | null>(null)
   const [selectedTechnician, setSelectedTechnician] = useState<string>('')
-  const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null)
-  const [showCancelDialog, setShowCancelDialog] = useState<string | null>(null)
-  const [techniciansList, setTechniciansList] = useState<Technician[]>(technicians)
+  const [techniciansList, setTechniciansList] = useState<Technician[]>([])
   const [showAddTechnicianDialog, setShowAddTechnicianDialog] = useState(false)
   const [newTechnician, setNewTechnician] = useState({ name: '', specialization: '', phone: '', email: '' })
-  const [adminPassword, setAdminPassword] = useState('')
+  const [assignmentSuccess, setAssignmentSuccess] = useState(false)
+  const [showReportDialog, setShowReportDialog] = useState<number | null>(null)
 
-  const fetchMaintenanceTasks = async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/maintenance/tasks')
-      const data = await response.json()
-
-      const savedItems = localStorage.getItem('assignedMaintenanceItems')
-      if (savedItems) {
-        const parsedAssignedItems = JSON.parse(savedItems)
-        setAssignedItems(parsedAssignedItems)
-
-        const assignedIds = parsedAssignedItems.map((item: any) => item.id)
-        const filteredItems = data.filter((item: any) => !assignedIds.includes(item.id))
-        setItems(filteredItems)
-      } else {
-        setItems(data)
+      setLoading(true)
+      const [pendingRes, assignedRes, completedRes, statsRes] = await Promise.all([
+        fetch('http://localhost:8000/maintenance/tasks'),
+        fetch('http://localhost:8000/maintenance/assigned-tasks'),
+        fetch('http://localhost:8000/maintenance/completed-tasks'),
+        fetch('http://localhost:8000/maintenance/stats'),
+      ])
+      if (pendingRes.ok) setPendingTasks(await pendingRes.json())
+      if (assignedRes.ok) {
+        const data = await assignedRes.json()
+        setAssignedTasks(data.map((t: any) => ({
+          id: t.assignment_id.toString(),
+          assignment_id: t.assignment_id,
+          deviceId: t.deviceId,
+          room: t.room,
+          lastService: t.lastService ?? '',
+          nextService: t.nextService ?? '',
+          issue: t.issue,
+          criticality: t.criticality,
+          technician: t.technicianName,
+          status: t.status,
+          technicianName: t.technicianName,
+          specialization: t.specialization
+        })))
       }
+      if (completedRes.ok) setCompletedTasks(await completedRes.json())
+      if (statsRes.ok) setStats(await statsRes.json())
     } catch (error) {
-      console.error('Error fetching maintenance tasks:', error)
+      console.error('Error fetching maintenance data:', error)
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [])
+
+  const fetchTechnicians = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:8000/technicians')
+      const data = await response.json()
+      setTechniciansList(data.map((tech: any) => ({
+        id: tech.technician_id.toString(),
+        name: tech.name,
+        specialization: tech.specialization,
+        available: tech.is_available,
+        phone: tech.phone,
+        email: tech.email
+      })))
+    } catch (error) {
+      console.error('Error fetching technicians:', error)
+    }
+  }, [])
 
   useEffect(() => {
-    fetchMaintenanceTasks()
-    const interval = setInterval(fetchMaintenanceTasks, 30000)
+    fetchAll()
+    fetchTechnicians()
+    const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchAll, fetchTechnicians])
 
-  const handleExportPageReport = () => {
-    const dateStr = new Date().toISOString().split('T')[0]
-
-    const pendingLines = items.length
-      ? items.map((item) =>
-        `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}]`
-      )
-      : ['No pending maintenance items.']
-
-    const assignedLines = assignedItems.length
-      ? assignedItems.map((item) =>
-        `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${item.technician || 'Not Assigned'
-        }`
-      )
-      : ['No assigned maintenance items.']
-
-    downloadPdfReport(
-      `maintenance_board_report_${dateStr}.pdf`,
-      'Maintenance Board Report',
-      [
-        {
-          title: 'Summary',
-          lines: [
-            `Report Date: ${dateStr}`,
-            `Total Devices: ${items.length + assignedItems.length}`,
-            `Pending Tasks: ${items.length}`,
-            `Assigned Tasks: ${assignedItems.length}`,
-          ],
-        },
-        {
-          title: 'Pending Maintenance',
-          lines: pendingLines,
-        },
-        {
-          title: 'Assigned Maintenance',
-          lines: assignedLines,
-        },
-      ]
-    )
+  const openAssignDialog = (alertId: string) => {
+    setReassigningAssignmentId(null)
+    setShowTechnicianDialog(alertId)
+    fetchTechnicians()
   }
 
-  const handleExportReport = (item: MaintenanceRecord) => {
-    const deviceData: DeviceData = getMockDeviceData(item.deviceId, item.room)
-    exportDeviceReport(deviceData)
+  const openReassignDialog = (assignmentId: number) => {
+    setReassigningAssignmentId(assignmentId)
+    setShowTechnicianDialog('reassign')
+    fetchTechnicians()
   }
 
-  useEffect(() => {
-    const loadAssignedItems = () => {
-      const savedItems = localStorage.getItem('assignedMaintenanceItems')
-      if (savedItems) {
-        setAssignedItems(JSON.parse(savedItems))
-      }
-    }
+  const handleAssignOrReassign = async () => {
+    if (!selectedTechnician) return
+    const tech = techniciansList.find(t => t.id === selectedTechnician)
+    if (!tech) return
 
-    // Load initial items
-    loadAssignedItems()
-
-    // Listen for storage changes
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'assignedMaintenanceItems') {
-        loadAssignedItems()
-      }
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-
-    // Also check for changes periodically (for same-tab updates)
-    const interval = setInterval(loadAssignedItems, 1000)
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      clearInterval(interval)
-    }
-  }, [])
-
-  const handleCheckboxChange = (itemId: string, checked: boolean) => {
-    const newSelectedItems = new Set(selectedItems)
-
-    if (checked) {
-      newSelectedItems.add(itemId)
-      setItems(prev => prev.map(item =>
-        item.id === itemId ? { ...item, scheduled: true } : item
-      ))
-    } else {
-      newSelectedItems.delete(itemId)
-      setItems(prev => prev.map(item =>
-        item.id === itemId ? { ...item, scheduled: false } : item
-      ))
-    }
-
-    setSelectedItems(newSelectedItems)
-  }
-
-  const handleScheduleClick = (itemId: string) => {
-    setShowTechnicianDialog(itemId)
-  }
-
-  const handleAssignTechnician = () => {
-    if (showTechnicianDialog && selectedTechnician) {
-      const technician = techniciansList.find(t => t.id === selectedTechnician)
-      const itemToAssign = items.find(item => item.id === showTechnicianDialog)
-
-      if (itemToAssign && technician) {
-        const updatedItem = { ...itemToAssign, technician: technician.name }
-
-        const newAssignedItems = [...assignedItems, updatedItem]
-        setAssignedItems(newAssignedItems)
-        localStorage.setItem('assignedMaintenanceItems', JSON.stringify(newAssignedItems))
-
-        setItems(prev => prev.filter(item => item.id !== showTechnicianDialog))
-
-        setSelectedItems(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(showTechnicianDialog)
-          return newSet
+    try {
+      let res: Response
+      if (reassigningAssignmentId !== null) {
+        res = await fetch('http://localhost:8000/maintenance/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignment_id: reassigningAssignmentId, technician_id: parseInt(tech.id) }),
+        })
+      } else {
+        res = await fetch('http://localhost:8000/maintenance/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alert_id: parseInt(showTechnicianDialog!), technician_id: parseInt(tech.id) }),
         })
       }
 
-      setShowTechnicianDialog(null)
-      setSelectedTechnician('')
+      if (res.ok) {
+        setAssignmentSuccess(true)
+        setSelectedTechnician('')
+        setTimeout(() => {
+          setAssignmentSuccess(false)
+          setShowTechnicianDialog(null)
+          setReassigningAssignmentId(null)
+          fetchAll()
+          fetchTechnicians()
+        }, 1500)
+      }
+    } catch (e) {
+      console.error('Error assigning technician:', e)
     }
   }
 
-  const handleUnassignTechnician = (itemId: string) => {
-    setShowCancelDialog(itemId)
-  }
+  const handleAddTechnician = async () => {
+    const { name, phone, email, specialization } = newTechnician
+    if (!name || !phone || !specialization) return
 
-  const confirmCancel = (itemId: string) => {
-    const itemToUnassign = assignedItems.find(item => item.id === itemId)
-
-    if (itemToUnassign) {
-      const updatedItem = { ...itemToUnassign, technician: undefined, scheduled: false }
-
-      const newAssignedItems = assignedItems.filter(item => item.id !== itemId)
-      setAssignedItems(newAssignedItems)
-      localStorage.setItem('assignedMaintenanceItems', JSON.stringify(newAssignedItems))
-
-      const restoredItem = { ...updatedItem, id: itemId }
-      setItems(prev => [...prev, restoredItem])
-
-      setSelectedItems(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(itemId)
-        return newSet
+    try {
+      const userPayload = {
+        id: crypto.randomUUID(),
+        email: email || `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        password: '$2b$10$placeholder',
+        name,
+        role: 'technician',
+        campus_id: null,
+        specialization,
+        phone,
+        created_at: new Date().toISOString(),
+      }
+      const userRes = await fetch('http://localhost:8000/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userPayload),
       })
-    }
-    setShowCancelDialog(null)
-  }
 
-
-  const handleExportAllReport = () => {
-    if (assignedItems.length === 0) return
-
-    const dateStr = new Date().toISOString().split('T')[0]
-
-    const lines = assignedItems.map((item) =>
-      `• ${item.deviceId} (${item.room}) — ${item.issue} [${item.criticality}] — Technician: ${item.technician || 'Not Assigned'
-      }`
-    )
-
-    downloadPdfReport(
-      `all-maintenance-report_${dateStr}.pdf`,
-      'All Assigned Maintenance Report',
-      [
-        {
-          title: 'Summary',
-          lines: [
-            `Report Date: ${dateStr}`,
-            `Total Assigned Devices: ${assignedItems.length}`,
-          ],
-        },
-        {
-          title: 'Assigned Maintenance',
-          lines,
-        },
-      ]
-    )
-  }
-
-  const handleDeleteConfirm = () => {
-    if (showDeleteDialog) {
-      setItems(prev => prev.filter(item => item.id !== showDeleteDialog))
-      setSelectedItems(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(showDeleteDialog)
-        return newSet
-      })
-      setShowDeleteDialog(null)
+      if (userRes.ok) {
+        setNewTechnician({ name: '', specialization: '', phone: '', email: '' })
+        setShowAddTechnicianDialog(false)
+        await fetchTechnicians()
+      }
+    } catch (e) {
+      console.error('Error adding technician:', e)
     }
   }
 
@@ -356,96 +236,43 @@ export default function MaintenancePage() {
             <h1 className="text-3xl font-bold mb-2">Maintenance</h1>
             <p className="text-muted-foreground">Manage and track AC unit maintenance schedules</p>
           </div>
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push('/dashboard')}
-              className="flex items-center gap-2 bg-white text-black hover:bg-gray-100 border-0"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/dashboard')}
+            className="flex items-center gap-2 bg-white text-black hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </div>
+
+        {/* ── STATS BANNER ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Pending', value: stats.pending, icon: <AlertTriangle className="w-4 h-4 text-orange-500" />, color: 'bg-orange-50 border-orange-100' },
+            { label: 'Assigned', value: stats.assigned, icon: <ClipboardList className="w-4 h-4 text-blue-500" />, color: 'bg-blue-50 border-blue-100' },
+            { label: 'Ongoing', value: stats.ongoing, icon: <Activity className="w-4 h-4 text-purple-500" />, color: 'bg-purple-50 border-purple-100' },
+            { label: 'Total Tasks', value: stats.total, icon: <CheckCircle2 className="w-4 h-4 text-green-500" />, color: 'bg-green-50 border-green-100' },
+          ].map(({ label, value, icon, color }) => (
+            <div key={label} className={`flex items-center gap-3 rounded-xl border p-4 ${color}`}>
+              <div className="p-2 rounded-lg bg-white shadow-sm">{icon}</div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-gray-800">{loading ? '—' : value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── 1. PENDING ── */}
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Pending Maintenance</h2>
+            <Button variant="outline" size="sm" onClick={fetchAll} className="flex items-center gap-1 text-xs">
+              <RefreshCw className="w-3 h-3" /> Refresh
             </Button>
           </div>
-        </div>
-
-
-
-        <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            Assigned Maintenance
-          </h2>
-          <div className="mb-4 overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>AC Unit</TableHead>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Issue</TableHead>
-                  <TableHead>Criticality</TableHead>
-                  <TableHead>Technician</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {assignedItems.map(item => (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                    </TableCell>
-                    <TableCell className="font-medium">{item.deviceId}</TableCell>
-                    <TableCell>{item.room}</TableCell>
-                    <TableCell>{item.issue}</TableCell>
-                    <TableCell>
-                      <Badge className={cn(
-                        item.criticality === 'High' ? 'bg-red-100 text-red-700' :
-                          item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                      )}>
-                        {item.criticality}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{item.technician}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleExportReport(item)}
-                        >
-                          <FileDown className="h-3 w-3 mr-1" />
-                          Export
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleUnassignTechnician(item.id)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {assignedItems.length === 0 && (
-            <div className="text-center py-8">
-              <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">No assigned maintenance technicians yet.</p>
-              <p className="text-gray-400 text-sm mt-2">Assign technicians to maintenance to see them here.</p>
-            </div>
-          )}
-        </div>
-        <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-600" />
-            Pending Maintenance
-          </h2>
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
@@ -455,11 +282,15 @@ export default function MaintenancePage() {
                   <TableHead>Room</TableHead>
                   <TableHead>Issue</TableHead>
                   <TableHead>Criticality</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map(item => (
+                {loading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+                ) : pendingTasks.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">No pending tasks</TableCell></TableRow>
+                ) : pendingTasks.map(item => (
                   <TableRow key={item.id}>
                     <TableCell className="text-xs text-muted-foreground">
                       {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
@@ -469,7 +300,7 @@ export default function MaintenancePage() {
                     <TableCell>{item.issue}</TableCell>
                     <TableCell>
                       <Badge className={cn(
-                        item.criticality === 'High' ? 'bg-red-100 text-red-700' :
+                        item.criticality === 'High' || item.criticality === 'Critical' ? 'bg-red-100 text-red-700' :
                           item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-green-100 text-green-700'
                       )}>
@@ -477,12 +308,8 @@ export default function MaintenancePage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        onClick={() => handleScheduleClick(item.id)}
-                      >
-                        <Users className="h-3 w-3 mr-1" />
-                        Assign
+                      <Button size="sm" onClick={() => openAssignDialog(item.id)}>
+                        <Users className="h-3 w-3 mr-1" /> Assign
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -490,191 +317,226 @@ export default function MaintenancePage() {
               </TableBody>
             </Table>
           </div>
-          {items.length === 0 && (
-            <div className="text-center py-8">
-              <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">No pending maintenance tasks.</p>
-            </div>
-          )}
         </div>
 
-      </div>
-
-      {showCancelDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-full">
-            <h3 className="text-lg font-semibold mb-4">Confirm Cancel</h3>
-            <p className="text-gray-600 mb-6">Do you want to cancel this maintenance assignment?</p>
-            <div className="flex justify-between gap-4">
-              <button
-                onClick={() => confirmCancel(showCancelDialog)}
-                className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-              >
-                Yes
-              </button>
-              <button
-                onClick={() => setShowCancelDialog(null)}
-                className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                No
-              </button>
-            </div>
+        {/* ── 2. ASSIGNED ── */}
+        <div className="rounded-lg border bg-card p-6">
+          <h2 className="text-xl font-semibold mb-4">Assigned Maintenance</h2>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>AC Unit</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+                ) : assignedTasks.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-6 text-gray-400">No assigned tasks</TableCell></TableRow>
+                ) : assignedTasks.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {item.timeStamp ? new Date(item.timeStamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                    </TableCell>
+                    <TableCell className="font-medium">{item.deviceId}</TableCell>
+                    <TableCell>{item.room}</TableCell>
+                    <TableCell>{item.issue}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-sm">{item.technicianName}</p>
+                        <p className="text-xs text-gray-500">{item.specialization}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={cn(
+                        item.status === 'Rejected' ? 'bg-red-100 text-red-700 border-none' :
+                          item.status === 'Accepted' ? 'bg-green-100 text-green-700 border-none' :
+                            'bg-yellow-100 text-yellow-700 border-none'
+                      )}>
+                        {item.status === 'Accepted' ? 'Accepted' : item.status === 'Rejected' ? 'Rejected' : 'Awaiting'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        {item.status === 'Accepted' && (
+                          <Button size="sm" variant="outline" onClick={() => setShowReportDialog(item.assignment_id!)}>
+                            <FileText className="h-3 w-3 mr-1" /> Report
+                          </Button>
+                        )}
+                        {item.status === 'Rejected' && (
+                          <>
+                            <Button size="sm" onClick={() => openReassignDialog(item.assignment_id!)}>
+                              <Users className="h-3 w-3 mr-1" /> Reassign
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setShowReportDialog(item.assignment_id!)}>
+                              <FileText className="h-3 w-3 mr-1" /> Report
+                            </Button>
+                          </>
+                        )}
+                        {item.status === 'Pending' && (
+                          <span className="text-xs text-gray-400 italic">Awaiting response</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </div>
-      )}
 
-      {showTechnicianDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-full">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Assign Technician</h3>
-              <button
-                onClick={() => {
-                  setAdminPassword('')
-                  setShowAddTechnicianDialog(true)
-                }}
-                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-              >
-                <Users className="h-3.5 w-3.5" />
-                Add
-              </button>
-            </div>
-            <div className="space-y-3">
-              {techniciansList.map(technician => (
-                <div key={technician.id} className="flex items-center space-x-3">
-                  <input
-                    type="radio"
-                    name="technician"
-                    value={technician.id}
-                    checked={selectedTechnician === technician.id}
-                    onChange={(e) => setSelectedTechnician(e.target.value)}
-                    disabled={!technician.available}
-                    className="rounded"
+        {/* ── 3. COMPLETED ── */}
+        <div className="rounded-lg border bg-card p-6">
+          <h2 className="text-xl font-semibold mb-4">Completed</h2>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>AC Unit</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead>Completed On</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+                ) : completedTasks.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">No completed tasks yet</TableCell></TableRow>
+                ) : completedTasks.map(item => (
+                  <TableRow key={item.assignment_id}>
+                    <TableCell className="font-medium">{item.deviceId}</TableCell>
+                    <TableCell>{item.room}</TableCell>
+                    <TableCell className="max-w-[300px] truncate">{item.issue}</TableCell>
+                    <TableCell>
+                      <span className="font-medium text-sm">{item.technicianName}</span>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{item.completedAt}</TableCell>
+                    <TableCell>
+                      <Badge className="bg-green-100 text-green-700 border-none">Completed</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+
+      {/* Technician Assignment / Reassignment Dialog */}
+      <AlertDialog open={!!showTechnicianDialog} onOpenChange={() => { setShowTechnicianDialog(null); setReassigningAssignmentId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-600" />
+              {reassigningAssignmentId !== null ? 'Reassign Technician' : 'Assign Technician'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {assignmentSuccess ? (
+                <span className="text-green-600 font-medium">
+                  {reassigningAssignmentId !== null ? 'Task reassigned successfully!' : 'Technician assigned successfully!'}
+                </span>
+              ) : reassigningAssignmentId !== null
+                ? 'Select a new technician to reassign this rejected task.'
+                : 'Select a technician to assign to this maintenance task.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {techniciansList.map(tech => (
+                <div key={tech.id} className={`flex items-center space-x-2 p-2 border rounded-lg ${tech.available ? 'hover:bg-accent/50 cursor-pointer' : 'opacity-50 bg-muted/50 cursor-not-allowed'}`}>
+                  <Checkbox
+                    id={`tech-${tech.id}`}
+                    checked={selectedTechnician === tech.id}
+                    onCheckedChange={() => tech.available && setSelectedTechnician(tech.id)}
+                    disabled={!tech.available}
                   />
-                  <div>
-                    <div className="font-medium">{technician.name}</div>
-                    <div className="text-sm text-muted-foreground">{technician.specialization}</div>
-                  </div>
-                  <div className={`ml-auto px-2 py-1 rounded-full text-xs ${technician.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                    {technician.available ? 'Available' : 'Unavailable'}
-                  </div>
+                  <label htmlFor={`tech-${tech.id}`} className={`text-sm font-medium leading-none ${tech.available ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                    {tech.name} <span className="text-xs text-gray-400">({tech.specialization})</span>
+                  </label>
+                  {!tech.available && <span className="ml-auto text-xs text-muted-foreground font-medium">Unavailable</span>}
                 </div>
               ))}
             </div>
-            <div className="flex items-center justify-between gap-2 mt-4">
-              <button
-                onClick={() => setShowTechnicianDialog(null)}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAssignTechnician}
-                disabled={!selectedTechnician}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                <Users className="h-4 w-4 mr-2" style={{ transform: 'rotate(0deg)' }} />
-                Assign
-              </button>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowAddTechnicianDialog(true)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Add Technician
+            </Button>
+            <div className="flex gap-2">
+              <AlertDialogCancel onClick={() => { setReassigningAssignmentId(null); setSelectedTechnician('') }}>Cancel</AlertDialogCancel>
+              <Button onClick={handleAssignOrReassign} disabled={!selectedTechnician} className="bg-green-500 hover:bg-green-600">
+                {reassigningAssignmentId !== null ? 'Reassign' : 'Assign'}
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {showAddTechnicianDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-full">
-            <h3 className="text-lg font-semibold mb-4">Add New Technician</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Name</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  placeholder="Enter technician name"
-                  value={newTechnician.name}
-                  onChange={(e) => setNewTechnician(prev => ({ ...prev, name: e.target.value }))}
+      {/* Add Technician Dialog */}
+      <AlertDialog open={showAddTechnicianDialog} onOpenChange={setShowAddTechnicianDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-blue-600" /> Add New Technician
+            </AlertDialogTitle>
+            <AlertDialogDescription>Enter the technician's information</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            {[
+              { label: 'Name', key: 'name', placeholder: 'Enter technician name' },
+              { label: 'Phone Number', key: 'phone', placeholder: 'Enter phone number' },
+              { label: 'Email Address', key: 'email', placeholder: 'Enter email address', type: 'email' },
+              { label: 'Specialization', key: 'specialization', placeholder: 'e.g., HVAC, Electrical' }
+            ].map(f => (
+              <div key={f.key} className="space-y-2">
+                <label className="text-sm font-medium">{f.label}</label>
+                <Input
+                  placeholder={f.placeholder}
+                  type={f.type ?? 'text'}
+                  value={(newTechnician as any)[f.key]}
+                  onChange={e => setNewTechnician(prev => ({ ...prev, [f.key]: e.target.value }))}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Phone</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  placeholder="Enter phone number"
-                  value={newTechnician.phone}
-                  onChange={(e) => setNewTechnician(prev => ({ ...prev, phone: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Email (optional)</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={newTechnician.email}
-                  onChange={(e) => setNewTechnician(prev => ({ ...prev, email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Specialization</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  placeholder="e.g., HVAC, Electrical"
-                  value={newTechnician.specialization}
-                  onChange={(e) => setNewTechnician(prev => ({ ...prev, specialization: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Admin Password</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  type="password"
-                  placeholder="Enter admin password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 mt-4">
-              <button
-                onClick={() => setShowAddTechnicianDialog(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (!newTechnician.name || !newTechnician.phone || !newTechnician.specialization) return
-                  const id = `tech-${Date.now()}`
-                  const added: Technician = {
-                    id,
-                    name: newTechnician.name,
-                    specialization: newTechnician.specialization,
-                    available: true,
-                    phone: newTechnician.phone,
-                    email: newTechnician.email || undefined,
-                  }
-                  setTechniciansList(prev => [...prev, added])
-                  setNewTechnician({ name: '', specialization: '', phone: '', email: '' })
-                  setAdminPassword('')
-                  setShowAddTechnicianDialog(false)
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                disabled={
-                  !newTechnician.name ||
-                  !newTechnician.phone ||
-                  !newTechnician.specialization ||
-                  !adminPassword
-                }
-              >
-                Save Technician
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleAddTechnician}
+              disabled={!newTechnician.name || !newTechnician.phone || !newTechnician.specialization}
+            >
+              Add Technician
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
+      {/* Report Dialog */}
+      <AlertDialog open={showReportDialog !== null} onOpenChange={() => setShowReportDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" /> Task Report
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Report for Assignment #{showReportDialog}. The technician has been notified and this task is being tracked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowReportDialog(null)}>Close</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
-

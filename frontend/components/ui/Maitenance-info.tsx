@@ -1,11 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useId } from 'react'
-
-import { Checkbox } from '@/components/ui/Checkbox'
-import { Button } from '@/components/ui/Button'
+import { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Input } from '@/components/ui/Input'
 import {
   Table,
@@ -16,12 +14,6 @@ import {
   TableRow
 } from '@/components/ui/Table'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/Dropdown-menu'
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -31,9 +23,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/Alert-dialog'
-import { EllipsisVertical, UserCheck, Calendar, Users, Plus } from 'lucide-react'
+import { EllipsisVertical, UserCheck, Users, Plus, RefreshCw, FileText, ClipboardList, Activity, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/Dropdown-menu'
 
-interface MaintenanceRecord {
+interface PendingTask {
   id: string
   deviceId: string
   room: string
@@ -41,8 +39,24 @@ interface MaintenanceRecord {
   nextService: string
   issue: string
   criticality: 'Low' | 'Medium' | 'High'
-  scheduled?: boolean
-  technician?: string
+  timeStamp?: string
+}
+
+interface AssignedTask {
+  assignment_id: number
+  deviceId: string
+  room: string
+  lastService: string
+  nextService: string
+  issue: string
+  criticality: string
+  status: string
+  technicianName: string
+  specialization: string
+}
+
+interface CompletedTask extends AssignedTask {
+  completedAt: string
 }
 
 interface Technician {
@@ -52,353 +66,416 @@ interface Technician {
   available: boolean
 }
 
-const initialTechnicians: Technician[] = [
-  { id: 'tech1', name: 'John Smith', specialization: 'HVAC', available: true },
-  { id: 'tech2', name: 'Sarah Johnson', specialization: 'Refrigeration', available: true },
-  { id: 'tech3', name: 'Mike Wilson', specialization: 'Electrical', available: true },
-  { id: 'tech4', name: 'Emily Davis', specialization: 'General Maintenance', available: false },
-  { id: 'tech5', name: 'Robert Brown', specialization: 'HVAC', available: true },
-  { id: 'tech6', name: 'Lisa Chen', specialization: 'Controls', available: true },
-]
+interface MaintenanceStats {
+  pending: number
+  assigned: number
+  ongoing: number
+  rejected: number
+  total: number
+}
 
-const initialItems: MaintenanceRecord[] = [
-  {
-    id: '1',
-    deviceId: 'AC-001',
-    room: 'Conference Room A',
-    lastService: '2024-01-15',
-    nextService: '2024-07-15',
-    issue: 'Filter cleaning required',
-    criticality: 'Low'
-  },
-  {
-    id: '2',
-    deviceId: 'AC-002',
-    room: 'Office 201',
-    lastService: '2024-02-20',
-    nextService: '2024-08-20',
-    issue: 'None',
-    criticality: 'Low'
-  },
-  {
-    id: '3',
-    deviceId: 'AC-003',
-    room: 'Lobby',
-    lastService: '2023-12-10',
-    nextService: '2024-06-10',
-    issue: 'Refrigerant level check needed',
-    criticality: 'Medium'
-  },
-  {
-    id: '4',
-    deviceId: 'AC-004',
-    room: 'Server Room',
-    lastService: '2024-03-05',
-    nextService: '2024-09-05',
-    issue: 'None',
-    criticality: 'Low'
-  },
-  {
-    id: '5',
-    deviceId: 'AC-005',
-    room: 'Office 305',
-    lastService: '2023-11-18',
-    nextService: '2024-05-18',
-    issue: 'Compressor noise detected',
-    criticality: 'High'
-  },
-  {
-    id: '6',
-    deviceId: 'AC-006',
-    room: 'Cafeteria',
-    lastService: '2024-01-30',
-    nextService: '2024-07-30',
-    issue: 'Drainage system check',
-    criticality: 'Medium'
-  },
-  {
-    id: '7',
-    deviceId: 'AC-007',
-    room: 'Office 102',
-    lastService: '2024-02-12',
-    nextService: '2024-08-12',
-    issue: 'None',
-    criticality: 'Low'
-  }
-]
+const CriticalityBadge = ({ criticality }: { criticality: string }) => (
+  <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${criticality === 'High' || criticality === 'Critical'
+    ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+    : criticality === 'Medium'
+      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+      : 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+    }`}>
+    {criticality}
+  </span>
+)
 
 const TableSelectableRowDemo = () => {
-  const id = useId()
-  const [items, setItems] = useState<MaintenanceRecord[]>(initialItems)
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set())
-  const [assignedItems, setAssignedItems] = useState<MaintenanceRecord[]>([])
+  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([])
+  const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([])
+  const [completedTasks, setCompletedTasks] = useState<CompletedTask[]>([])
+  const [stats, setStats] = useState<MaintenanceStats>({ pending: 0, assigned: 0, ongoing: 0, rejected: 0, total: 0 })
+  const [loading, setLoading] = useState(true)
+
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null)
   const [showTechnicianDialog, setShowTechnicianDialog] = useState<string | null>(null)
+  // When reassigning, track the assignment_id of the rejected task
+  const [reassigningAssignmentId, setReassigningAssignmentId] = useState<number | null>(null)
   const [selectedTechnician, setSelectedTechnician] = useState<string>('')
   const [showAddTechnicianDialog, setShowAddTechnicianDialog] = useState(false)
   const [newTechnician, setNewTechnician] = useState({ name: '', phone: '', email: '', specialization: '' })
-  const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians)
+  const [technicians, setTechnicians] = useState<Technician[]>([])
   const [assignmentSuccess, setAssignmentSuccess] = useState(false)
+  const [showReportDialog, setShowReportDialog] = useState<number | null>(null)
 
-  // Load data from localStorage on mount
-  useEffect(() => {
-    const savedTechnicians = localStorage.getItem('maintenanceTechnicians')
-    const savedAssignedItems = localStorage.getItem('assignedMaintenanceItems')
-
-    if (savedTechnicians) {
-      try {
-        setTechnicians(JSON.parse(savedTechnicians))
-      } catch (e) {
-        console.error('Failed to parse saved technicians', e)
-      }
-    }
-
-    if (savedAssignedItems) {
-      try {
-        setAssignedItems(JSON.parse(savedAssignedItems))
-      } catch (e) {
-        console.error('Failed to parse saved assigned items', e)
-      }
+  const fetchAll = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [pendingRes, assignedRes, completedRes, statsRes] = await Promise.all([
+        fetch('http://localhost:8000/maintenance/tasks'),
+        fetch('http://localhost:8000/maintenance/assigned-tasks'),
+        fetch('http://localhost:8000/maintenance/completed-tasks'),
+        fetch('http://localhost:8000/maintenance/stats'),
+      ])
+      if (pendingRes.ok) setPendingTasks(await pendingRes.json())
+      if (assignedRes.ok) setAssignedTasks(await assignedRes.json())
+      if (completedRes.ok) setCompletedTasks(await completedRes.json())
+      if (statsRes.ok) setStats(await statsRes.json())
+    } catch (e) {
+      console.error('Error loading maintenance data:', e)
+    } finally {
+      setLoading(false)
     }
   }, [])
 
-  // Persist technicians to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('maintenanceTechnicians', JSON.stringify(technicians))
-  }, [technicians])
-
-  // Persist assigned items to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('assignedMaintenanceItems', JSON.stringify(assignedItems))
-  }, [assignedItems])
-
-  const handleCheckboxChange = (itemId: string, checked: boolean) => {
-    const newSelectedItems = new Set(selectedItems)
-
-    if (checked) {
-      newSelectedItems.add(itemId)
-      // Mark as scheduled when checked
-      setItems(prev => prev.map(item =>
-        item.id === itemId ? { ...item, scheduled: true } : item
-      ))
-    } else {
-      newSelectedItems.delete(itemId)
-      // Unschedule when unchecked
-      setItems(prev => prev.map(item =>
-        item.id === itemId ? { ...item, scheduled: false, technician: undefined } : item
-      ))
+  const fetchTechnicians = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:8000/technicians')
+      const data = await res.json()
+      setTechnicians(data.map((t: any) => ({
+        id: t.technician_id.toString(),
+        name: t.name,
+        specialization: t.specialization,
+        available: t.is_available
+      })))
+    } catch (e) {
+      console.error('Error fetching technicians:', e)
     }
+  }, [])
 
-    setSelectedItems(newSelectedItems)
-    // Remove from marked for deletion if unchecked
-    const newMarkedForDeletion = new Set(markedForDeletion)
-    newMarkedForDeletion.delete(itemId)
-    setMarkedForDeletion(newMarkedForDeletion)
+  useEffect(() => {
+    fetchAll()
+    fetchTechnicians()
+    const interval = setInterval(fetchAll, 15000)
+    return () => clearInterval(interval)
+  }, [fetchAll, fetchTechnicians])
+
+  /** Open the technician dialog for a NEW assignment (from Pending table) */
+  const openAssignDialog = (alertId: string) => {
+    setReassigningAssignmentId(null)
+    setShowTechnicianDialog(alertId)
+    fetchTechnicians()
   }
 
-  const handleDoubleClick = (itemId: string) => {
-    if (selectedItems.has(itemId)) {
-      const newMarkedForDeletion = new Set(markedForDeletion)
-      if (newMarkedForDeletion.has(itemId)) {
-        newMarkedForDeletion.delete(itemId)
+  /** Open the technician dialog for a REASSIGNMENT (from Assigned table, rejected row) */
+  const openReassignDialog = (assignmentId: number) => {
+    setReassigningAssignmentId(assignmentId)
+    setShowTechnicianDialog('reassign')
+    fetchTechnicians()
+  }
+
+  const handleAssignOrReassign = async () => {
+    if (!selectedTechnician) return
+    const tech = technicians.find(t => t.id === selectedTechnician)
+    if (!tech) return
+
+    try {
+      let res: Response
+
+      if (reassigningAssignmentId !== null) {
+        // Reassign an existing (rejected) assignment
+        res = await fetch('http://localhost:8000/maintenance/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignment_id: reassigningAssignmentId, technician_id: parseInt(tech.id) }),
+        })
       } else {
-        newMarkedForDeletion.add(itemId)
+        // Fresh assign from the Pending table
+        res = await fetch('http://localhost:8000/maintenance/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alert_id: parseInt(showTechnicianDialog!), technician_id: parseInt(tech.id) }),
+        })
       }
-      setMarkedForDeletion(newMarkedForDeletion)
-    }
-  }
 
-  const handleScheduleClick = (itemId: string) => {
-    setShowTechnicianDialog(itemId)
-  }
-
-  const handleAssignTechnician = () => {
-    if (showTechnicianDialog && selectedTechnician) {
-      const technician = technicians.find(t => t.id === selectedTechnician)
-      const itemToAssign = items.find(item => item.id === showTechnicianDialog)
-
-      if (itemToAssign && technician) {
-        // Update item with technician
-        const updatedItem = { ...itemToAssign, technician: technician.name }
-
-        // Move to assigned items
-        const newAssignedItems = [...assignedItems, updatedItem]
-        setAssignedItems(newAssignedItems)
-
-        // Mark technician as unavailable
-        setTechnicians(prev => prev.map(t =>
-          t.id === selectedTechnician ? { ...t, available: false } : t
-        ))
-
-        // Remove from main items
-        setItems(prev => prev.filter(item => item.id !== showTechnicianDialog))
-
-        // Remove from selected items
-        setSelectedItems(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(showTechnicianDialog)
-          return newSet
-        })
-
-        // Remove from marked for deletion if it was marked
-        setMarkedForDeletion(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(showTechnicianDialog)
-          return newSet
-        })
-
-        // Show success message and reset
+      if (res.ok) {
         setAssignmentSuccess(true)
         setSelectedTechnician('')
-        setTimeout(() => setAssignmentSuccess(false), 2000)
-
-        // Keep dialog open so user can add more technicians if needed
+        setTimeout(() => {
+          setAssignmentSuccess(false)
+          setShowTechnicianDialog(null)
+          setReassigningAssignmentId(null)
+          fetchAll()
+          fetchTechnicians()
+        }, 1500)
       }
+    } catch (e) {
+      console.error('Error assigning technician:', e)
     }
   }
 
-  const handleAddTechnician = () => {
-    if (newTechnician.name && newTechnician.phone && newTechnician.email && newTechnician.specialization) {
-      const technicianId = `tech${Date.now()}`
-      const addedTechnician: Technician = {
-        id: technicianId,
-        name: newTechnician.name,
-        specialization: newTechnician.specialization,
-        available: true
+  const handleAddTechnician = async () => {
+    const { name, phone, email, specialization } = newTechnician
+    if (!name || !phone || !email || !specialization) return
+
+    try {
+      // 1. Create the user account
+      const userPayload = {
+        id: crypto.randomUUID(),
+        email,
+        password: '$2b$10$placeholder', // placeholder – technician will set password on first login
+        name,
+        role: 'technician',
+        campus_id: null,
+        specialization,
+        phone,
+        created_at: new Date().toISOString(),
+      }
+      const userRes = await fetch('http://localhost:8000/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userPayload),
+      })
+
+      if (!userRes.ok) {
+        const err = await userRes.json()
+        console.error('Failed to create technician user:', err)
+        return
       }
 
-      setTechnicians(prev => [...prev, addedTechnician])
       setNewTechnician({ name: '', phone: '', email: '', specialization: '' })
       setShowAddTechnicianDialog(false)
-      // Keep the assign dialog open so user can immediately assign the newly added technician
+      // Refresh tech list from backend
+      await fetchTechnicians()
+    } catch (e) {
+      console.error('Error adding technician:', e)
     }
-  }
-
-  const isMarkedForDeletion = (itemId: string) => {
-    return markedForDeletion.has(itemId)
   }
 
   const handleDeleteConfirm = async () => {
-    if (showDeleteDialog) {
-      setItems(prev => prev.filter(item => item.id !== showDeleteDialog))
-      setSelectedItems(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(showDeleteDialog)
-        return newSet
+    if (!showDeleteDialog) return
+    setPendingTasks(prev => prev.filter(t => t.id !== showDeleteDialog))
+    try {
+      await fetch(`http://localhost:8000/maintenance/false-feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: null }),
       })
-      setMarkedForDeletion(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(showDeleteDialog)
-        return newSet
-      })
-
-      // When user confirms deletion of a maintenance task,
-      // send false-alarm feedback to backend. Backend will
-      // trigger retraining non-blockingly when false alerts
-      // in the last hour hit a multiple of 10.
-      try {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/maintenance/false-feedback`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ device_id: null }),
-          }
-        )
-      } catch (e) {
-        console.error('Failed to send false-alert feedback', e)
-      }
-
-      setShowDeleteDialog(null)
+    } catch (e) {
+      console.error('Failed to send false-alert feedback', e)
     }
+    setShowDeleteDialog(null)
+    fetchAll()
   }
 
+  const sharedHeaders = (
+    <TableRow className='hover:bg-transparent'>
+      <TableHead className="font-semibold">DeviceID</TableHead>
+      <TableHead className="font-semibold whitespace-nowrap">Room</TableHead>
+      <TableHead className="font-semibold hidden md:table-cell whitespace-nowrap">Last Service</TableHead>
+      <TableHead className="font-semibold hidden lg:table-cell whitespace-nowrap">Next Service</TableHead>
+      <TableHead className="font-semibold hidden sm:table-cell">Issue / Suggestion</TableHead>
+      <TableHead className="font-semibold">Action</TableHead>
+    </TableRow>
+  )
+
   return (
-    <div className='w-full'>
-      <div className='w-full overflow-x-auto rounded-md border'>
-        <Table className="w-full table-auto">
-          <TableHeader>
-            <TableRow className='hover:bg-transparent'>
-              <TableHead>
-                <Checkbox id={id} aria-label='select-all' />
-              </TableHead>
-              <TableHead className="font-semibold">DeviceID</TableHead>
-              <TableHead className="font-semibold whitespace-nowrap">Room</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell whitespace-nowrap">Last Service</TableHead>
-              <TableHead className="font-semibold hidden lg:table-cell whitespace-nowrap">Next Service</TableHead>
-              <TableHead className="font-semibold hidden sm:table-cell w-full whitespace-nowrap">Issue/Suggestion</TableHead>
-              <TableHead className="font-semibold">Criticality</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold hidden xl:table-cell">Technician</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map(item => (
-              <TableRow
-                key={item.id}
-                className={`
-                  ${selectedItems.has(item.id) && !isMarkedForDeletion(item.id) ? 'bg-green-100 dark:bg-green-950/30 border-l-4 border-l-green-500' : ''}
-                  ${isMarkedForDeletion(item.id) ? 'bg-red-100 dark:bg-red-950/30 border-l-4 border-l-red-500' : ''}
-                  ${selectedItems.has(item.id) && isMarkedForDeletion(item.id) ? 'bg-yellow-100 dark:bg-yellow-950/30 border-l-4 border-l-yellow-500' : ''}
-                  has-data-[state=checked]:bg-muted/50
-                `}
-                onDoubleClick={() => handleDoubleClick(item.id)}
-              >
-                <TableCell>
-                  <Checkbox
-                    id={`table-checkbox-${item.id}`}
-                    aria-label={`device-checkbox-${item.id}`}
-                    checked={selectedItems.has(item.id)}
-                    onCheckedChange={(checked) => handleCheckboxChange(item.id, checked as boolean)}
-                  />
-                </TableCell>
-                <TableCell className='font-medium'>{item.deviceId}</TableCell>
-                <TableCell className="whitespace-nowrap">{item.room}</TableCell>
-                <TableCell className="hidden md:table-cell whitespace-nowrap">{item.lastService}</TableCell>
-                <TableCell className="hidden lg:table-cell whitespace-nowrap">{item.nextService}</TableCell>
-                <TableCell className="hidden sm:table-cell whitespace-nowrap">{item.issue}</TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.criticality === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400' :
-                    item.criticality === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400' :
-                      'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                    }`}>
-                    {item.criticality}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {item.scheduled && item.technician ? (
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
-                      {item.technician}
-                    </Badge>
-                  ) : item.scheduled ? (
-                    <Badge
-                      className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400 cursor-pointer hover:bg-green-200"
-                      onClick={() => handleScheduleClick(item.id)}
-                    >
-                      Scheduled
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">Pending</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="hidden xl:table-cell">
-                  {item.technician ? (
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-green-600" />
-                      <span className="text-sm">{item.technician}</span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Not Assigned</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div className='w-full space-y-10'>
+
+      {/* ── STATS BANNER ─────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Pending', value: stats.pending, icon: <AlertTriangle className="w-4 h-4 text-orange-500" />, color: 'bg-orange-50 border-orange-100 dark:bg-orange-950/30 dark:border-orange-900' },
+          { label: 'Assigned', value: stats.assigned, icon: <ClipboardList className="w-4 h-4 text-blue-500" />, color: 'bg-blue-50 border-blue-100 dark:bg-blue-950/30 dark:border-blue-900' },
+          { label: 'Ongoing', value: stats.ongoing, icon: <Activity className="w-4 h-4 text-purple-500" />, color: 'bg-purple-50 border-purple-100 dark:bg-purple-950/30 dark:border-purple-900' },
+          { label: 'Total Tasks', value: stats.total, icon: <CheckCircle2 className="w-4 h-4 text-green-500" />, color: 'bg-green-50 border-green-100 dark:bg-green-950/30 dark:border-green-900' },
+        ].map(({ label, value, icon, color }) => (
+          <div key={label} className={`flex items-center gap-3 rounded-xl border p-4 ${color}`}>
+            <div className="p-2 rounded-lg bg-white dark:bg-gray-800 shadow-sm">{icon}</div>
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{label}</p>
+              <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{loading ? '—' : value}</p>
+            </div>
+          </div>
+        ))}
       </div>
+
+      {/* ── 1. PENDING ─────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Pending Maintenance</h2>
+          <Button variant="outline" size="sm" onClick={fetchAll} className="flex items-center gap-1 text-xs">
+            <RefreshCw className="w-3 h-3" /> Refresh
+          </Button>
+        </div>
+        <div className='w-full overflow-x-auto rounded-md border'>
+          <Table className="w-full table-auto">
+            <TableHeader>{sharedHeaders}</TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+              ) : pendingTasks.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">No pending tasks</TableCell></TableRow>
+              ) : pendingTasks.map(task => (
+                <TableRow key={task.id}>
+                  <TableCell className='font-medium'>{task.deviceId}</TableCell>
+                  <TableCell className="whitespace-nowrap">{task.room}</TableCell>
+                  <TableCell className="hidden md:table-cell whitespace-nowrap">{task.lastService ?? '—'}</TableCell>
+                  <TableCell className="hidden lg:table-cell whitespace-nowrap">{task.nextService ?? '—'}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <div className="flex items-center gap-2 flex-nowrap">
+                      <CriticalityBadge criticality={task.criticality} />
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[350px]">{task.issue}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm"><EllipsisVertical className="w-4 h-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openAssignDialog(task.id)}>
+                          <UserCheck className="w-4 h-4 mr-2 text-blue-600" /> Assign Technician
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600" onClick={() => setShowDeleteDialog(task.id)}>
+                          Remove (False Alert)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+
+      {/* ── 2. ASSIGNED ────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Assigned</h2>
+        <div className='w-full overflow-x-auto rounded-md border'>
+          <Table className="w-full table-auto">
+            <TableHeader>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className="font-semibold">DeviceID</TableHead>
+                <TableHead className="font-semibold whitespace-nowrap">Room</TableHead>
+                <TableHead className="font-semibold hidden sm:table-cell">Issue / Suggestion</TableHead>
+                <TableHead className="font-semibold">Technician</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+              ) : assignedTasks.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">No assigned tasks</TableCell></TableRow>
+              ) : assignedTasks.map(task => (
+                <TableRow key={task.assignment_id}>
+                  <TableCell className='font-medium'>{task.deviceId}</TableCell>
+                  <TableCell className="whitespace-nowrap">{task.room}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <div className="flex items-center gap-2 flex-nowrap">
+                      <CriticalityBadge criticality={task.criticality} />
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[350px]">{task.issue}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-sm">{task.technicianName}</p>
+                      <p className="text-xs text-gray-500">{task.specialization}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={
+                      task.status === 'Rejected'
+                        ? 'bg-red-100 text-red-700 border-none'
+                        : task.status === 'Accepted'
+                          ? 'bg-green-100 text-green-700 border-none'
+                          : 'bg-yellow-100 text-yellow-700 border-none'
+                    }>
+                      {task.status === 'Accepted' ? 'Accepted' : task.status === 'Rejected' ? 'Rejected' : 'Awaiting'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {/* Accepted → Report only */}
+                      {task.status === 'Accepted' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex items-center gap-1 h-8 px-3 text-xs"
+                          onClick={() => setShowReportDialog(task.assignment_id)}
+                        >
+                          <FileText className="w-3 h-3" /> Report
+                        </Button>
+                      )}
+
+                      {/* Rejected → Reassign + Report */}
+                      {task.status === 'Rejected' && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 text-xs"
+                            onClick={() => openReassignDialog(task.assignment_id)}
+                          >
+                            <UserCheck className="w-3 h-3 mr-1" /> Reassign
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex items-center gap-1 h-8 px-3 text-xs"
+                            onClick={() => setShowReportDialog(task.assignment_id)}
+                          >
+                            <FileText className="w-3 h-3" /> Report
+                          </Button>
+                        </>
+                      )}
+
+                      {/* Pending/Awaiting → no action */}
+                      {task.status === 'Pending' && (
+                        <span className="text-xs text-gray-400 italic">Awaiting response</span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+
+      {/* ── 3. COMPLETED ───────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Completed</h2>
+        <div className='w-full overflow-x-auto rounded-md border'>
+          <Table className="w-full table-auto">
+            <TableHeader>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className="font-semibold">DeviceID</TableHead>
+                <TableHead className="font-semibold whitespace-nowrap">Room</TableHead>
+                <TableHead className="font-semibold hidden sm:table-cell">Issue / Suggestion</TableHead>
+                <TableHead className="font-semibold">Technician</TableHead>
+                <TableHead className="font-semibold whitespace-nowrap hidden md:table-cell">Completed On</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">Loading...</TableCell></TableRow>
+              ) : completedTasks.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-gray-400">No completed tasks yet</TableCell></TableRow>
+              ) : completedTasks.map(task => (
+                <TableRow key={task.assignment_id}>
+                  <TableCell className='font-medium'>{task.deviceId}</TableCell>
+                  <TableCell className="whitespace-nowrap">{task.room}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <div className="flex items-center gap-2 flex-nowrap">
+                      <CriticalityBadge criticality={task.criticality} />
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[350px]">{task.issue}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-sm">{task.technicianName}</p>
+                      <p className="text-xs text-gray-500">{task.specialization}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-sm text-gray-500 whitespace-nowrap">{task.completedAt}</TableCell>
+                  <TableCell>
+                    <Badge className="bg-green-100 text-green-700 border-none">Completed</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!showDeleteDialog} onOpenChange={() => setShowDeleteDialog(null)}>
@@ -418,20 +495,22 @@ const TableSelectableRowDemo = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Technician Assignment Dialog */}
-      <AlertDialog open={!!showTechnicianDialog} onOpenChange={() => setShowTechnicianDialog(null)}>
+      {/* Technician Assignment / Reassignment Dialog */}
+      <AlertDialog open={!!showTechnicianDialog} onOpenChange={() => { setShowTechnicianDialog(null); setReassigningAssignmentId(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-600" />
-              Assign Technician
+              {reassigningAssignmentId !== null ? 'Reassign Technician' : 'Assign Technician'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {assignmentSuccess ? (
-                <span className="text-green-600 font-medium">✓ Technician assigned successfully!</span>
-              ) : (
-                'Select a technician to assign to this maintenance task.'
-              )}
+                <span className="text-green-600 font-medium">
+                  {reassigningAssignmentId !== null ? 'Task reassigned successfully!' : 'Technician assigned successfully!'}
+                </span>
+              ) : reassigningAssignmentId !== null
+                ? 'Select a new technician to reassign this rejected task.'
+                : 'Select a technician to assign to this maintenance task.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
@@ -444,35 +523,22 @@ const TableSelectableRowDemo = () => {
                     onCheckedChange={() => tech.available && setSelectedTechnician(tech.id)}
                     disabled={!tech.available}
                   />
-                  <label
-                    htmlFor={`tech-${tech.id}`}
-                    className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${tech.available ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                  >
-                    {tech.name}
+                  <label htmlFor={`tech-${tech.id}`} className={`text-sm font-medium leading-none ${tech.available ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                    {tech.name} <span className="text-xs text-gray-400">({tech.specialization})</span>
                   </label>
-                  {!tech.available && (
-                    <span className="ml-auto text-xs text-muted-foreground font-medium">Unavailable</span>
-                  )}
+                  {!tech.available && <span className="ml-auto text-xs text-muted-foreground font-medium">Unavailable</span>}
                 </div>
               ))}
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowAddTechnicianDialog(true)}
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Technician
+            <Button variant="outline" onClick={() => setShowAddTechnicianDialog(true)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Add Technician
             </Button>
             <div className="flex gap-2">
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button onClick={handleAssignTechnician} disabled={!selectedTechnician} className="bg-green-500 hover:bg-green-600">
-                Assign
-              </Button>
-              <Button onClick={() => setShowTechnicianDialog(null)} variant="outline">
-                Done
+              <AlertDialogCancel onClick={() => { setReassigningAssignmentId(null); setSelectedTechnician('') }}>Cancel</AlertDialogCancel>
+              <Button onClick={handleAssignOrReassign} disabled={!selectedTechnician} className="bg-green-500 hover:bg-green-600">
+                {reassigningAssignmentId !== null ? 'Reassign' : 'Assign'}
               </Button>
             </div>
           </div>
@@ -484,47 +550,27 @@ const TableSelectableRowDemo = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-blue-600" />
-              Add New Technician
+              <Plus className="h-5 w-5 text-blue-600" /> Add New Technician
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              Enter the technician's information
-            </AlertDialogDescription>
+            <AlertDialogDescription>Enter the technician's information</AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                placeholder="Enter technician name"
-                value={newTechnician.name}
-                onChange={(e) => setNewTechnician(prev => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Phone Number</label>
-              <Input
-                placeholder="Enter phone number"
-                value={newTechnician.phone}
-                onChange={(e) => setNewTechnician(prev => ({ ...prev, phone: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email Address</label>
-              <Input
-                placeholder="Enter email address"
-                type="email"
-                value={newTechnician.email}
-                onChange={(e) => setNewTechnician(prev => ({ ...prev, email: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Specialization</label>
-              <Input
-                placeholder="e.g., HVAC, Electrical, Refrigeration"
-                value={newTechnician.specialization}
-                onChange={(e) => setNewTechnician(prev => ({ ...prev, specialization: e.target.value }))}
-              />
-            </div>
+            {[
+              { label: 'Name', key: 'name', placeholder: 'Enter technician name' },
+              { label: 'Phone Number', key: 'phone', placeholder: 'Enter phone number' },
+              { label: 'Email Address', key: 'email', placeholder: 'Enter email address', type: 'email' },
+              { label: 'Specialization', key: 'specialization', placeholder: 'e.g., HVAC, Electrical' }
+            ].map(f => (
+              <div key={f.key} className="space-y-2">
+                <label className="text-sm font-medium">{f.label}</label>
+                <Input
+                  placeholder={f.placeholder}
+                  type={f.type ?? 'text'}
+                  value={(newTechnician as any)[f.key]}
+                  onChange={e => setNewTechnician(prev => ({ ...prev, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -534,6 +580,23 @@ const TableSelectableRowDemo = () => {
             >
               Add Technician
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Report Dialog */}
+      <AlertDialog open={showReportDialog !== null} onOpenChange={() => setShowReportDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" /> Task Report
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Report for Assignment #{showReportDialog}. The technician has been notified and this task is being tracked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowReportDialog(null)}>Close</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
